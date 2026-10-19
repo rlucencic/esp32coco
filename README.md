@@ -15,6 +15,11 @@
 </p>
 
 <p align="center">
+  <b>Work in progress:</b> not everything has been tested, and games and demos may or may not
+  work satisfactorily.
+</p>
+
+<p align="center">
   <img alt="Extended Color BASIC on the CoCo 2: a two-line program listed and run, the squares of 1 to 5" src="docs/images/coco2-basic.png" width="49%">
   <img alt="PMODE 4 on the CoCo 2 with artifact colours: rings of blue and orange dots, an orange and a blue band where every other pixel is set" src="docs/images/coco2-pmode4.png" width="49%">
   <br>
