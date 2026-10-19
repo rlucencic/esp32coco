@@ -1,0 +1,13 @@
+build/
+build-tab5/
+managed_components/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+dependencies.lock.esp32p4
+roms/*.rom
+components/coco/host/build/
+__pycache__/
+*.ppm
+.DS_Store
+.vscode
