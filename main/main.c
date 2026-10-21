@@ -176,11 +176,11 @@ static void release(uint8_t usage)
     }
 }
 
-/* ---- Joystick: the keypad, the mouse, touch ---- */
+/* ---- Joystick: the keypad, the mouse, the touchpad ---- */
 
 static uint8_t s_pad;                   /* keypad: 1 up 2 down 4 left 8 right 16 button */
 static int s_mouse_x = 32, s_mouse_y = 32;
-static uint8_t s_mouse_buttons, s_touch_button;
+static uint8_t s_mouse_buttons;
 
 static void joystick_update(void)
 {
@@ -189,8 +189,7 @@ static void joystick_update(void)
     if (s_pad & 0x08) x = 63;
     if (s_pad & 0x01) y = 0;
     if (s_pad & 0x02) y = 63;
-    uint8_t b = (uint8_t)((s_mouse_buttons & 1) | ((s_mouse_buttons >> 1) & 1) << 1 | ((s_pad & 0x10) ? 1 : 0) |
-                          s_touch_button);
+    uint8_t b = (uint8_t)((s_mouse_buttons & 1) | ((s_mouse_buttons >> 1) & 1) << 1 | ((s_pad & 0x10) ? 1 : 0));
     coco_joystick(settings.joystick, x, y, b);
     coco_joystick(1 - settings.joystick, 32, 32, 0);
 }
@@ -227,14 +226,18 @@ static void hid_mouse(int dx, int dy, uint8_t buttons)
     joystick_update();
 }
 
-/* Touch on the picture: the joystick there, its button down while touched */
-static void touch(int x, int y, bool pressed)
+/* The touch screen as a touchpad (the runtime's): the joystick follows the
+ * finger's moves, the picture's 512 x 192 being its 64 x 64 steps (in the
+ * mouse's eighths of a step: a pixel one across, 8/3 down); a tap is the
+ * button, the long press the second one
+ */
+static void touchpad(int dx, int dy, uint8_t buttons)
 {
-    int jx = (x - 64) * 64 / 512, jy = (y - 24) * 64 / 192;
-    s_mouse_x = jx < 0 ? 0 : jx > 63 ? 63 : jx;
-    s_mouse_y = jy < 0 ? 0 : jy > 63 ? 63 : jy;
-    s_touch_button = pressed ? 1 : 0;
-    joystick_update();
+    static int thirds;                  /* of an eighth, down */
+    thirds += dy * 8;
+    int ey = thirds / 3;
+    thirds -= ey * 3;
+    hid_mouse(dx, ey, buttons);
 }
 
 static void hid_key(uint8_t usage, bool pressed)
@@ -588,7 +591,7 @@ static void status(emu_json_t *j, int section)
         emu_json_row(j, "ROMs", s_rom_text);
         snprintf(text, sizeof(text), "%s%s", s.fast ? "1.79 MHz" : "0.89 MHz", s.native ? ", 6309 native mode" : "");
         emu_json_row(j, "CPU", text);
-        snprintf(text, sizeof(text), "the %s one: mouse, touch and the numeric keypad (F11 switches)",
+        snprintf(text, sizeof(text), "the %s one: mouse, touchpad and the numeric keypad (F11 switches)",
                  settings.joystick ? "left" : "right");
         emu_json_row(j, "Joystick", text);
         emu_json_row(j, "Slot", coco_cart_path() ? "ROM cartridge" : coco_disk_controller() ? "Disk controller"
@@ -731,7 +734,7 @@ static const emu_machine_t machine = {
     .audio_pending = coco_audio_pending,
     .hid_key = hid_key,
     .hid_mouse = hid_mouse,
-    .touch = touch,
+    .touchpad = touchpad,
     .choices = choices,
     .choice_count = CHOICES,
     .choice_names = choice_names,

@@ -111,7 +111,9 @@ noise when you choose to hear it)
 - **Keyboards**: Bluetooth (BLE HID) on both boards, **USB** keyboards and
   mice on the Tab5's USB-A port, the Tab5 Keyboard; the CoCo 3's ALT, CTRL,
   F1 and F2 on the PC's
-- **Joystick**: a mouse, the touch screen or the numeric keypad move it
+- **Joystick**: a mouse or the numeric keypad move it, and the touch
+  screen as a touchpad, on both boards, for when there's no mouse at hand
+  (a mouse is the better way)
 - **Web page** at `http://coco.local`: drop disk images, tapes, cartridges or
   `.ZIP` files onto it, put them into drives, make blank ones, and watch the
   machine, drives and board live
@@ -125,7 +127,7 @@ noise when you choose to hear it)
 | Chip | ESP32-S3-WROOM-1-N16R8: 16 MB flash, 8 MB octal PSRAM | ESP32-P4 (RISC-V, 360 MHz): 16 MB flash, 32 MB PSRAM; an ESP32-C6 for WiFi and Bluetooth |
 | Screen | 7" 1024×600 RGB, GT911 capacitive touch | 5" 1280×720 MIPI-DSI, capacitive touch (either panel revision), held landscape |
 | Storage | microSD card (FAT32 or exFAT) | microSD card (FAT32 or exFAT) |
-| Input | any BLE keyboard and mouse | USB keyboards and mice on the USB-A port, any BLE keyboard and mouse, the Tab5 Keyboard |
+| Input | any BLE keyboard and mouse; the touch screen as a touchpad | USB keyboards and mice on the USB-A port, any BLE keyboard and mouse, the Tab5 Keyboard; the touch screen as a touchpad |
 | Sound | a speaker on the MAX98357A output (optional, `menuconfig`) | the built-in speaker (ES8388) |
 
 The picture is 640×240: the 256×192 (or the CoCo 3's up to 640×225) picture
@@ -206,8 +208,11 @@ upper/lower case). Ctrl, Alt, F1 and F2 are the CoCo 3's CTRL, ALT, F1 and
 F2. F5 is the reset button.
 
 **Joystick**: the mouse moves it (the CoCo's own mouse was a joystick), its
-buttons are the joystick's; touching the picture puts it there with the
-button down; the numeric keypad (8 4 6 2 and the diagonals, 0 or 5 the
+buttons are the joystick's. Without a mouse the touch screen is a
+touchpad: a finger moving anywhere on it moves the joystick, a tap
+presses its button, a tap and touching again moves it with the button
+held, holding still for half a second holds the second button. The
+numeric keypad (8 4 6 2 and the diagonals, 0 or 5 the
 button) pushes it to the edges. F11 switches between the right and the left
 joystick.
 
@@ -288,7 +293,7 @@ options and the lessons learned along the way.
   modes, saving and loading on floppies and tapes, NitrOS-9 (6809 and 6309)
   from the hard disk, the setup screen and the drives page. Not tried by
   hand yet: the sound by ear, Bluetooth and USB keyboards, the mouse and
-  touch as the joystick, the Tab5 Keyboard. **Games and other software
+  the touchpad as the joystick, the Tab5 Keyboard. **Games and other software
   haven't been tried yet**; no commercial cartridges (only a test one).
 - The cartridge slot holds a ROM cartridge or the disk controller, not
   both (there's no Multi-Pak).
