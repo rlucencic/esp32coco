@@ -304,6 +304,20 @@ bool vhd_dirty(void);
 void vhd_flush(void);
 void vhd_media_status(coco_media_status_t *status);
 
+/* ---- space/space.c: free space on the disks (the web page) ---- */
+
+/* Worked out again for floppy drive 0-1 or the hard disk (COCO_DRIVES);
+ * emulation stopped
+ */
+void space_update(int drive);
+/* The images as space.c reads them: fdc.c's (above fdc_disk_read()) and
+ * the hard disk's file; false past the end
+ */
+uint64_t fdc_disk_bytes(int drive, bool one_side);
+bool fdc_disk_read(int drive, bool one_side, uint64_t offset, void *buf, uint32_t len);
+uint64_t vhd_bytes(void);
+bool vhd_read_bytes(uint64_t offset, void *buf, uint32_t len);
+
 /* ---- sound.c ---- */
 
 void sound_silent(bool silent);         /* frames run ahead (fast tape loading) */

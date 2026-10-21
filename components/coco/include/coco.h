@@ -190,6 +190,12 @@ void coco_hd_eject(void);
 const char *coco_hd_path(void);
 bool coco_hd_write_protected(void);
 bool coco_hd_create(const char *path, uint32_t bytes);
+/* A disk's free space and size in bytes, as its file system counts them
+ * (OS-9's bitmap, Disk BASIC's granule table); worked out at insert and
+ * flush (any task may ask). False if not known
+ */
+bool coco_disk_space(int drive, uint64_t *free_bytes, uint64_t *size);
+bool coco_hd_space(uint64_t *free_bytes, uint64_t *size);
 
 typedef struct {
     int light;                  /* floppy drive busy, -1 none */

@@ -429,6 +429,17 @@ int main(int argc, char **argv)
         write_ppm(out);
     }
     coco_media_flush();
+    for (int d = 0; d <= COCO_DRIVES; d++) {
+        uint64_t free_bytes, size;
+        if (d < COCO_DRIVES ? coco_disk_space(d, &free_bytes, &size) : coco_hd_space(&free_bytes, &size)) {
+            if (d < COCO_DRIVES) {
+                printf("Floppy %d: ", d);
+            } else {
+                printf("Hard disk: ");
+            }
+            printf("%llu bytes free of %llu\n", (unsigned long long)free_bytes, (unsigned long long)size);
+        }
+    }
     if (wav) {
         uint32_t data = (uint32_t)samples * 4;
         uint8_t hdr[44] = { 'R', 'I', 'F', 'F' };

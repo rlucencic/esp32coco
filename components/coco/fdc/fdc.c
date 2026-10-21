@@ -200,6 +200,7 @@ bool coco_disk_insert(int drive, const char *path)
     d->any_dirty = false;
     COCO_LOG("drive %d: %s, %d tracks, %d side%s%s", drive, path, d->tracks, d->sides, d->sides > 1 ? "s" : "",
              ro ? ", read only" : "");
+    space_update(drive);
     return true;
 }
 
@@ -235,6 +236,7 @@ void coco_disk_eject(int drive)
     free(d->data);
     d->data = NULL;
     d->path[0] = 0;
+    space_update(drive);
 }
 
 const char *coco_disk_path(int drive)
@@ -281,8 +283,49 @@ bool coco_disks_dirty(void)
 void coco_disks_flush(void)
 {
     for (int i = 0; i < COCO_DRIVES; i++) {
+        bool written = s_drives[i].any_dirty;
         flush_drive(&s_drives[i]);
+        if (written) {
+            space_update(i);
+        }
     }
+}
+
+/* The disk's 256-byte sectors in a file system's order: OS-9's LSNs (a
+ * track's sides one after the other, as the image has them) or, one_side,
+ * side 0's tracks (Disk BASIC)
+ */
+uint64_t fdc_disk_bytes(int drive, bool one_side)
+{
+    const drive_t *d = drive >= 0 && drive < COCO_DRIVES ? &s_drives[drive] : NULL;
+    if (d == NULL || d->data == NULL || d->ssize != 256) {
+        return 0;
+    }
+    return (uint64_t)d->tracks * (one_side ? 1 : d->sides) * d->spt * 256;
+}
+
+bool fdc_disk_read(int drive, bool one_side, uint64_t offset, void *buf, uint32_t len)
+{
+    uint8_t *out = buf;
+    if (offset + len > fdc_disk_bytes(drive, one_side)) {
+        return false;
+    }
+    const drive_t *d = &s_drives[drive];
+    while (len > 0) {
+        uint32_t lsn = (uint32_t)(offset / 256), at = (uint32_t)(offset % 256);
+        uint32_t per_track = (uint32_t)d->spt * (one_side ? 1 : d->sides);
+        int track = (int)(lsn / per_track), side = (int)(lsn % per_track) / d->spt, s = (int)(lsn % d->spt);
+        long off = sector_offset(d, track, side, d->first + s);
+        if (off < 0) {
+            return false;
+        }
+        uint32_t n = 256 - at < len ? 256 - at : len;
+        memcpy(out, d->data + off + at, n);
+        out += n;
+        offset += n;
+        len -= n;
+    }
+    return true;
 }
 
 /* ---- The lines ---- */

@@ -166,6 +166,11 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   mouse/touch as the joystick, the Tab5 Keyboard.
 - Test media live in the scratchpad (NitrOS-9 EOU from lcurtisboyle.com);
   never in the repository.
+- **Free disk space** (web page, `space/space.c`): floppies OS-9, then
+  RS-DOS; the VHD OS-9; counted at insert, eject and after a flush. Host:
+  FREE(0)/FREE(1) and NitrOS-9's `free`; Tab5 (2026-10-21): an OS-9
+  floppy 132096 of 184320, a 128 MB NitrOS-9 hard disk 38687744 of
+  134212608.
 
 ## Open items
 

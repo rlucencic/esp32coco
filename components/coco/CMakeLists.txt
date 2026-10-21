@@ -3,10 +3,11 @@ idf_component_register(SRCS "coco.c" "cpu/cpu.c" "memory/memory.c" "sam/sam.c" "
                             "vdg/vdg.c" "vdg/font6847.c" "gime/gime.c" "gime/gime_video.c" "gime/font8x8.c"
                             "keyboard/keyboard.c" "joystick/joystick.c" "sound/sound.c"
                             "cartridge/cartridge.c" "cassette/cassette.c" "fdc/fdc.c" "harddisk/vhd.c"
+                            "space/space.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "."
                        REQUIRES m6809
-                       PRIV_REQUIRES emudbg esp_psram)
+                       PRIV_REQUIRES emudbg esp_psram diskspace)
 
 # Runs in the emulation loop. Jump tables for the switches (the IDF turns
 # them off for code that may run with the flash cache disabled; the

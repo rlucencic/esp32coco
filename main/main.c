@@ -595,15 +595,20 @@ static void status(emu_json_t *j, int section)
                                                                                              : "empty");
         return;
     }
+    uint64_t free_bytes, size;
     for (int d = 0; d < COCO_DRIVES; d++) {
         const char *name = disks_name(d);
+        free_bytes = size = 0;
+        coco_disk_space(d, &free_bytes, &size);
         snprintf(text, sizeof(text), "track %u", m.track[d]);
-        emu_json_drive(j, drive_names[d], name, coco_disk_write_protected(d), m.light == d, m.reads[d], m.writes[d],
-                       name ? text : NULL);
+        emu_json_drive_space(j, drive_names[d], name, coco_disk_write_protected(d), m.light == d, m.reads[d],
+                             m.writes[d], name ? text : NULL, free_bytes, size);
     }
+    free_bytes = size = 0;
+    coco_hd_space(&free_bytes, &size);
     snprintf(text, sizeof(text), "sector %lu", (unsigned long)m.hd_sector);
-    emu_json_drive(j, drive_names[DRIVE_HD], disks_name(DRIVE_HD), coco_hd_write_protected(), m.hd_busy, m.hd_reads,
-                   m.hd_writes, disks_name(DRIVE_HD) ? text : NULL);
+    emu_json_drive_space(j, drive_names[DRIVE_HD], disks_name(DRIVE_HD), coco_hd_write_protected(), m.hd_busy,
+                         m.hd_reads, m.hd_writes, disks_name(DRIVE_HD) ? text : NULL, free_bytes, size);
     snprintf(text, sizeof(text), "%lu of %lu bytes%s", (unsigned long)m.cas_position, (unsigned long)m.cas_size,
              m.cas_recording ? ", recording" : m.cas_motor ? ", playing" : "");
     emu_json_drive(j, drive_names[DRIVE_CAS], disks_name(DRIVE_CAS), coco_cas_write_protected(), m.cas_motor, 0, 0,

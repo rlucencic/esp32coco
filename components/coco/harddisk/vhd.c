@@ -154,6 +154,7 @@ bool coco_hd_insert(const char *path)
     vhd.dirty = false;
     snprintf(vhd.path, sizeof(vhd.path), "%s", path);
     COCO_LOG("hard disk %s, %lu sectors%s", path, (unsigned long)vhd.sectors, ro ? ", read only" : "");
+    space_update(COCO_DRIVES);
     return true;
 }
 
@@ -162,6 +163,7 @@ void coco_hd_eject(void)
     if (vhd.fp) {
         fclose(vhd.fp);
         vhd.fp = NULL;
+        space_update(COCO_DRIVES);
     }
     vhd.path[0] = 0;
     vhd.dirty = false;
@@ -202,7 +204,20 @@ void vhd_flush(void)
         fflush(vhd.fp);
         fsync(fileno(vhd.fp));
         vhd.dirty = false;
+        space_update(COCO_DRIVES);
     }
+}
+
+uint64_t vhd_bytes(void)
+{
+    return vhd.fp ? (uint64_t)vhd.sectors * 256 : 0;
+}
+
+/* (the next command seeks again) */
+bool vhd_read_bytes(uint64_t offset, void *buf, uint32_t len)
+{
+    return vhd.fp && offset + len <= vhd_bytes() && fseek(vhd.fp, (long)offset, SEEK_SET) == 0 &&
+           fread(buf, 1, len, vhd.fp) == len;
 }
 
 void vhd_media_status(coco_media_status_t *s)
