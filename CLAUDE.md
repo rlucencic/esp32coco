@@ -6,7 +6,7 @@ ESP32-S3 7" (1024x600, target esp32s3, the default) and the M5Stack Tab5
 (ESP32-P4, 1280x720, target esp32p4). Cartridges, cassette (.CAS), two
 floppies (.DSK, WD1793 + Disk BASIC), an OS-9 hard disk (VHD interface),
 Bluetooth keyboard and mouse, USB keyboard and mouse on the Tab5, an LVGL
-setup screen, a web page. ESP-IDF v5.5.4, C.
+setup screen, a web page. ESP-IDF v5.5.6, C.
 
 The board side (tasks, LCD, touch, SD, WiFi, BLE, USB HID, setup screen,
 web page, console) and the 6809/6309 core (`components/m6809`) are the
@@ -21,7 +21,7 @@ Always with the IDF's Python environment:
 
 ```sh
 bash -c '. $IDF_PATH/export.sh >/dev/null 2>&1; \
-  export IDF_PYTHON_ENV_PATH=/Users/robertlucencic/.espressif/tools/python/v5.5.4/venv; \
+  export IDF_PYTHON_ENV_PATH=/Users/robertlucencic/.espressif/tools/python/v5.5.6/venv; \
   export PATH=$IDF_PYTHON_ENV_PATH/bin:$PATH; \
   idf.py build && idf.py -p /dev/cu.usbmodem1101 app-flash'
 # Tab5:

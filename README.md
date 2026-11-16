@@ -139,7 +139,7 @@ the Tab5 960×720: the 4:3 of a TV. Both boards run either CoCo at full speed
 
 ### 1. What you need
 
-- [ESP-IDF](https://github.com/espressif/esp-idf) v5.5 (developed with v5.5.4)
+- [ESP-IDF](https://github.com/espressif/esp-idf) v5.5 (developed with v5.5.6)
 - [esp32emu](https://github.com/rlucencic/esp32emu), checked out next to this project (`../esp32emu`)
 - The ROM images in `roms/` (see [roms/README.md](roms/README.md)): Color BASIC and Extended BASIC for the CoCo 2, `coco3.rom` for the CoCo 3, and Disk BASIC for the floppies
 - A microSD card, FAT32 or exFAT
