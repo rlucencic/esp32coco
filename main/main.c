@@ -45,7 +45,7 @@ static void reserve_memory(void)
 
 static void storage(bool sd_card)
 {
-    emu_set_drive_info(sd_card ? "Disks, tapes and cartridges in coco/ on the SD card" : "No SD card: no disks");
+    emu_set_drive_info(sd_card ? "Disks and tapes in coco/, cartridges in coco/roms on the SD card" : "No SD card: no disks");
 }
 
 /* ---- Starting ---- */
@@ -71,15 +71,13 @@ static bool start(void)
     s_cfg.basic = s_cfg.extended = s_cfg.coco3_rom = NULL;
     if (coco3) {
         if (!load(ROM_COCO3)) {
-            emu_set_message("No CoCo 3 ROM: put coco3.rom into roms/ and flash with idf.py flash, "
-                            "or copy it into coco/roms on the SD card.");
+            emu_set_message("No CoCo 3 ROM: put coco3.rom into roms/ and flash with idf.py flash.");
             return false;
         }
         s_cfg.coco3_rom = s_rom[ROM_COCO3];
     } else {
         if (!load(ROM_BASIC)) {
-            emu_set_message("No Color BASIC ROM: put bas13.rom into roms/ and flash with idf.py flash, "
-                            "or copy it into coco/roms on the SD card.");
+            emu_set_message("No Color BASIC ROM: put bas13.rom into roms/ and flash with idf.py flash.");
             return false;
         }
         s_cfg.basic = s_rom[ROM_BASIC];
@@ -400,6 +398,7 @@ static const char *const *choice_names(int i)
 enum { DRIVE_0, DRIVE_1, DRIVE_HD, DRIVE_CAS, DRIVE_CART, DRIVES };
 
 static const char *const extensions[] = { ".dsk", ".os9", ".vhd", ".cas", ".rom", ".ccc", ".bin", NULL };
+static const char *const cart_extensions[] = { ".rom", ".ccc", ".bin", NULL };     /* in coco/roms */
 static const char *const drive_names[] = { "Floppy 0", "Floppy 1", "Hard disk", "Cassette", "Cartridge" };
 
 #define HD_BYTES        (32u * 1024 * 1024)
@@ -427,16 +426,22 @@ static bool has_ext(const char *name, const char *const *exts)
     return false;
 }
 
+/* A cartridge in coco/roms, not a file there that overrides a built-in ROM */
+static bool is_cart(const char *name)
+{
+    const char *base = strrchr(name, '/');
+    return has_ext(name, cart_extensions) && !rom_store_is_rom(base ? base + 1 : name);
+}
+
 static bool accepts(int drive, const char *name)
 {
     static const char *const floppy[] = { ".dsk", ".os9", NULL };
     static const char *const hd[] = { ".vhd", NULL };
     static const char *const tape[] = { ".cas", NULL };
-    static const char *const cart[] = { ".rom", ".ccc", ".bin", NULL };
     switch (drive) {
     case DRIVE_HD: return has_ext(name, hd);
     case DRIVE_CAS: return has_ext(name, tape);
-    case DRIVE_CART: return has_ext(name, cart);
+    case DRIVE_CART: return is_cart(name);
     default: return has_ext(name, floppy);
     }
 }
@@ -532,6 +537,7 @@ static bool write_protected(int drive)
 static const disks_config_t disks = {
     .folder = "coco",
     .extensions = extensions,
+    .cart_extensions = cart_extensions,
     .description = "Disks (.DSK .VHD), tapes (.CAS), cartridges (.ROM .CCC)",
     .title = "Drives",
     .button = "Drives",

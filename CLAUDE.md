@@ -61,7 +61,7 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
 | Path | What |
 |---|---|
 | `main/main.c` | The CoCo as an `emu_machine_t`: memory, ROMs, setup rows, key map, joystick (mouse, touchpad, keypad), the five drives, status, console |
-| `main/settings.c`, `rom_store.c` | NVS settings; ROMs from the partition or `coco/roms` on the SD card |
+| `main/settings.c`, `rom_store.c` | NVS settings; ROMs from the partition; one in `coco/roms` on the SD card (the cartridges' folder) overrides it |
 | `components/coco/` | The CoCo, platform independent (`include/coco.h`), a folder per part |
 | `components/coco/host/` | Desktop build for testing |
 | `../esp32emu/components/m6809/` | The 6809/6309 core, disassembler, debugger adapter, its tests |

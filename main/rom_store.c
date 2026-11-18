@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include "esp_log.h"
 #include "esp_partition.h"
 #include "emu/sdcard.h"
@@ -102,9 +103,7 @@ bool rom_store_load(rom_id_t id, uint8_t *buf)
         return false;
     }
     uint32_t size = rom_store_size(id);
-    if (from_partition(roms[id].slot * SLOT, size, buf) && plausible(buf, size)) {
-        return true;
-    }
+    /* the card's overrides the built-in one */
     if (from_sd(roms[id].name, buf, size) == (long)size && plausible(buf, size)) {
         s_found[id] = roms[id].name;
         return true;
@@ -112,6 +111,17 @@ bool rom_store_load(rom_id_t id, uint8_t *buf)
     if (roms[id].other && from_sd(roms[id].other, buf, size) == (long)size && plausible(buf, size)) {
         s_found[id] = roms[id].other;
         return true;
+    }
+    s_found[id] = NULL;
+    return from_partition(roms[id].slot * SLOT, size, buf) && plausible(buf, size);
+}
+
+bool rom_store_is_rom(const char *name)
+{
+    for (int i = 0; i < ROM_COUNT; i++) {
+        if (strcasecmp(name, roms[i].name) == 0 || (roms[i].other && strcasecmp(name, roms[i].other) == 0)) {
+            return true;
+        }
     }
     return false;
 }

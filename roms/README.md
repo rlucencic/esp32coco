@@ -2,8 +2,8 @@
 
 The CoCo's ROMs are Tandy's and Microsoft's: they are copyrighted and not
 part of this repository. Put your own images here before `idf.py flash`
-(the build writes them into the `coco_roms` flash partition), or copy them
-into the `coco/roms` folder on the SD card. Either way, the names below.
+(the build writes them into the `coco_roms` flash partition), under the
+names below.
 
 | File | What | Size | CRC32 | SHA-1 |
 |---|---|---|---|---|
@@ -44,6 +44,6 @@ them, flash this one again with `idf.py flash`.
 
 ## On the SD card
 
-`coco/roms/<name>` (upper or lower case), used for any ROM the flash
-partition doesn't have. The web page's status lists the ROMs in use; the
+`coco/roms/<name>` (upper or lower case; the cartridges' folder), used
+instead of the flashed ROM. The web page's status lists the ROMs in use; the
 setup screen says which one is missing if the machine can't start.

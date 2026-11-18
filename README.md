@@ -158,8 +158,9 @@ idf.py -B build-tab5 -DIDF_TARGET=esp32p4 -DSDKCONFIG=build-tab5/sdkconfig build
 idf.py -B build-tab5 -DIDF_TARGET=esp32p4 -DSDKCONFIG=build-tab5/sdkconfig -p /dev/cu.usbmodem… flash
 ```
 
-Later updates only need `idf.py -p … app-flash`. Instead of flashing the
-ROMs, you can also copy them into a `coco/roms` folder on the SD card.
+Later updates only need `idf.py -p … app-flash`. A ROM file of the same
+name in the `coco/roms` folder on the SD card (with the cartridges) is used
+instead of the flashed one.
 
 ### 3. First start
 
@@ -193,8 +194,8 @@ ROMs, you can also copy them into a `coco/roms` folder on the SD card.
 | Make new media | **New** next to a drive on the drives page, or on the web page |
 | Copy files from a computer | Drop them onto the web page (ZIP files are unpacked), or `curl -T game.dsk http://coco.local/disks/` |
 
-Everything lives in the `coco` folder on the SD card. The inserted media
-are remembered across restarts.
+Disks and tapes live in the `coco` folder on the SD card, cartridges in
+`coco/roms`. The inserted media are remembered across restarts.
 
 <p align="center">
   <img src="docs/images/tab5-drives.png" width="70%" alt="The drives page: Floppy 0, Floppy 1, Hard disk, Cassette and Cartridge, each with Insert, New and Eject buttons">
