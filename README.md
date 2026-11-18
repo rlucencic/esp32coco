@@ -48,7 +48,8 @@ and LC III), [esp32cpc](https://github.com/rlucencic/esp32cpc) (Amstrad CPC),
 [esp32xl](https://github.com/rlucencic/esp32xl) (Atari 800XL and 130XE),
 [esp32msx](https://github.com/rlucencic/esp32msx) (MSX1 and MSX2),
 [esp32gs](https://github.com/rlucencic/esp32gs) (Apple IIGS),
-[esp32pc](https://github.com/rlucencic/esp32pc) (IBM PC/XT and PC/AT) and
+[esp32pc](https://github.com/rlucencic/esp32pc) (IBM PC/XT and PC/AT),
+[esp32ql](https://github.com/rlucencic/esp32ql) (Sinclair QL) and
 [esp32ami](https://github.com/rlucencic/esp32ami) (Amiga 500, 2000 and 600);
 all are built on
 the shared runtime [esp32emu](https://github.com/rlucencic/esp32emu), which
