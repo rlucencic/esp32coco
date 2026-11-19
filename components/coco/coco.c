@@ -475,6 +475,24 @@ void coco_get_status(coco_status_t *s)
     s->halted = coco.cpu.halt;
 }
 
+void coco_get_chips(coco_chips_t *c)
+{
+    memset(c, 0, sizeof(*c));
+    c->sam = sam.state;
+    for (int p = 0; p < 2; p++) {
+        c->pia_ctl[p][0] = pia[p].ctl[0];
+        c->pia_ctl[p][1] = pia[p].ctl[1];
+    }
+    c->pia1_b = pia_output(1, 1);
+    c->video = coco.coco3 ? gime.video_address : sam_display_offset();
+    if (coco.coco3) {
+        memcpy(c->gime, gime.reg, sizeof(c->gime));
+        memcpy(c->mmu, gime.mmu, sizeof(c->mmu));
+        memcpy(c->palette, gime.palette, sizeof(c->palette));
+    }
+    sound_get_state(c);
+}
+
 uint8_t coco_peek(uint16_t address)
 {
     return memory_peek(address);

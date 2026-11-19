@@ -264,6 +264,7 @@ uint8_t joystick_buttons(void);         /* PA0-PA3 pulled low */
 void sound_reset(void);
 void sound_update(void);                /* the output level may have changed */
 void sound_line_end(void);              /* this line's samples */
+void sound_get_state(coco_chips_t *chips);  /* (the web page's status) */
 
 /* ---- cartridge/cartridge.c ---- */
 

@@ -7,6 +7,7 @@
  * the CoCo into it: memory, ROMs, settings, keyboard map, joystick, the
  * drives (two floppies, the hard disk, the cassette, the cartridge), status.
  */
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +25,6 @@ static const char *TAG = "main";
 
 static coco_config_t s_cfg;
 static uint8_t *s_rom[ROM_COUNT];
-static char s_rom_text[128];
 static bool s_started;
 
 /* ---- Memory ----
@@ -84,14 +84,6 @@ static bool start(void)
         s_cfg.extended = load(ROM_EXTENDED) ? s_rom[ROM_EXTENDED] : NULL;
     }
     s_cfg.disk_rom = load(ROM_DISK) ? s_rom[ROM_DISK] : NULL;
-    if (coco3) {
-        snprintf(s_rom_text, sizeof(s_rom_text), "%s%s%s", rom_store_name(ROM_COCO3),
-                 s_cfg.disk_rom ? ", " : " (no Disk BASIC)", s_cfg.disk_rom ? rom_store_name(ROM_DISK) : "");
-    } else {
-        snprintf(s_rom_text, sizeof(s_rom_text), "%s%s%s%s%s", rom_store_name(ROM_BASIC),
-                 s_cfg.extended ? ", " : " (no Extended BASIC)", s_cfg.extended ? rom_store_name(ROM_EXTENDED) : "",
-                 s_cfg.disk_rom ? ", " : " (no Disk BASIC)", s_cfg.disk_rom ? rom_store_name(ROM_DISK) : "");
-    }
     if (!coco_init(&s_cfg)) {
         emu_set_message("The CoCo could not be set up: see the log.");
         return false;
@@ -581,27 +573,306 @@ static void every_second(void)
     }
 }
 
-/* ---- Status ---- */
+/* ---- Status ----
+ *
+ * The machine card's rows: the chips' registers now (coco_get_chips()).
+ * The whole reply has esp32emu's 4 KB: the rows stay short.
+ */
+
+static void add(char *text, size_t size, size_t *n, const char *fmt, ...)
+{
+    if (*n >= size - 1) {
+        return;
+    }
+    va_list ap;
+    va_start(ap, fmt);
+    int k = vsnprintf(text + *n, size - *n, fmt, ap);
+    va_end(ap);
+    *n = k < 0 ? *n : *n + k >= size ? size - 1 : *n + k;
+}
+
+/* A colour number's colour, as the picture has it */
+static void swatch(char *text, size_t size, size_t *n, uint8_t colour)
+{
+    uint16_t v = coco_palette()[colour < COCO_COLOURS ? colour : 0];
+    unsigned r = (v >> 11) * 255 / 31, g = ((v >> 5) & 63) * 255 / 63, b = (v & 31) * 255 / 31;
+    add(text, size, n, " <b style=\"background:#%02x%02x%02x\">&nbsp;&nbsp;&nbsp;</b>", r, g, b);
+}
+
+static void rom_row(emu_json_t *j, const coco_chips_t *c, bool coco3)
+{
+    static const struct {
+        rom_id_t id;
+        const char *what;
+        uint8_t version;        /* where the file's name has it: bas13.rom 1.3, disk10.rom 1.0 */
+    } roms[] = {
+        { ROM_COCO3, "Super Extended BASIC", 0 }, { ROM_BASIC, "Color BASIC", 3 },
+        { ROM_EXTENDED, "Extended BASIC 1.1", 0 }, { ROM_DISK, "Disk BASIC", 4 },
+    };
+    const uint8_t *loaded[] = { s_cfg.coco3_rom, s_cfg.basic, s_cfg.extended, s_cfg.disk_rom };
+    char text[256];
+    size_t n = 0;
+    for (int pass = 0; pass < 2; pass++) {      /* those from the SD card, then the flash's */
+        int listed = 0;
+        for (int i = 0; i < 4; i++) {
+            if (!loaded[i] || rom_store_from_sd(roms[i].id) != (pass == 0)) {
+                continue;
+            }
+            const char *name = rom_store_name(roms[i].id);
+            add(text, sizeof(text), &n, "%s%s", listed++ ? ", " : n ? "; " : "", roms[i].what);
+            if (roms[i].version && strlen(name) > roms[i].version + 1u) {
+                add(text, sizeof(text), &n, " %c.%c", name[roms[i].version], name[roms[i].version + 1]);
+            }
+        }
+        if (listed) {
+            add(text, sizeof(text), &n, " from the %s", pass == 0 ? "SD card" : "flash");
+        }
+    }
+    if (!coco3 && !s_cfg.extended) {
+        add(text, sizeof(text), &n, "; no Extended BASIC");
+    }
+    if (!s_cfg.disk_rom) {
+        add(text, sizeof(text), &n, "; no Disk BASIC");
+    }
+    /* in the CPU's map now: none with the SAM's TY (all RAM) */
+    if (c->sam & 0x8000) {
+        add(text, sizeof(text), &n, "; in now: none (all RAM)");
+    } else if (coco3) {
+        static const char *const maps[4] = {
+            "16 KB internal + 16 KB cartridge", "16 KB internal + 16 KB cartridge", "32 KB internal", "32 KB cartridge",
+        };
+        add(text, sizeof(text), &n, "; in now: %s", maps[c->gime[0] & 3]);
+    } else {
+        add(text, sizeof(text), &n, "; in now: all, $8000-$FEFF");
+    }
+    emu_json_row(j, "ROM", text);
+}
+
+static void memory_row(emu_json_t *j, const coco_chips_t *c, bool coco3)
+{
+    char text[200];
+    size_t n = 0;
+    if (coco3) {
+        uint8_t init0 = c->gime[0];
+        int task = c->gime[1] & 1;
+        add(text, sizeof(text), &n, "INIT0 $%02X: ", init0);
+        if (init0 & 0x40) {
+            add(text, sizeof(text), &n, "MMU on, task %d:", task);
+            for (int i = 0; i < 8; i++) {
+                add(text, sizeof(text), &n, " $%02X", c->mmu[task * 8 + i] & 0x3F);
+            }
+        } else {
+            add(text, sizeof(text), &n, "MMU off, blocks $38-$3F");
+        }
+        if (init0 & 0x08) {
+            add(text, sizeof(text), &n, "; $FExx constant");
+        }
+    } else {
+        static const char *const sizes[4] = { "4", "16", "64", "64" };
+        add(text, sizeof(text), &n, "SAM $%04X: %s KB RAM, map type %d (%s)%s", c->sam,
+            sizes[(c->sam >> 13) & 3], (c->sam >> 15) & 1, (c->sam & 0x8000) ? "all RAM" : "ROMs at $8000",
+            (c->sam & 0x0400) ? ", page 1" : "");
+    }
+    emu_json_row(j, "Memory", text);
+}
+
+/* The VDG's mode (the CoCo 2's, or the CoCo 3's in CoCo video); its colours
+ * as VDG colour numbers (n of them into colours)
+ */
+static void vdg_mode(char *text, size_t size, size_t *n, uint8_t pb, uint32_t video, bool coco3, uint8_t *colours,
+                     int *count)
+{
+    bool css = pb & 0x08;
+    if (pb & 0x80) {
+        static const struct {
+            uint16_t w, h;
+            uint8_t colours;
+            int8_t pmode;
+            const char *name;
+        } modes[8] = {
+            { 64, 64, 4, -1, "CG1" }, { 128, 64, 2, -1, "RG1" }, { 128, 64, 4, -1, "CG2" }, { 128, 96, 2, 0, "RG2" },
+            { 128, 96, 4, 1, "CG3" }, { 128, 192, 2, 2, "RG3" }, { 128, 192, 4, 3, "CG6" }, { 256, 192, 2, 4, "RG6" },
+        };
+        int m = (pb >> 4) & 7;
+        add(text, size, n, "Graphics %u × %u, %u colours (%s", modes[m].w, modes[m].h, modes[m].colours, modes[m].name);
+        if (modes[m].pmode >= 0) {
+            add(text, size, n, ", PMODE %d", modes[m].pmode);
+        }
+        add(text, size, n, ")");
+        if (modes[m].colours == 4) {
+            for (int i = 0; i < 4; i++) {
+                colours[(*count)++] = (css ? 4 : 0) + i;
+            }
+        } else {
+            colours[(*count)++] = css ? 10 : 8;
+            colours[(*count)++] = css ? 11 : 9;
+        }
+    } else {
+        add(text, size, n, "Text 32 × 16%s, %s", coco3 ? ((pb & 0x10) ? ", lower case" : "") :
+            (pb & 0x10) ? " with SG6 blocks" : " with SG4 blocks", css ? "orange" : "green");
+        colours[(*count)++] = css ? 14 : 12;
+        colours[(*count)++] = css ? 15 : 13;
+    }
+    add(text, size, n, "; screen at $%04lX", (unsigned long)video);
+}
+
+static void screen_rows(emu_json_t *j, const coco_chips_t *c, bool coco3)
+{
+    char text[1100];
+    size_t n = 0;
+    uint8_t colours[16];
+    int count = 0;
+    bool legacy = !coco3 || (c->gime[0] & 0x80);
+    if (legacy) {
+        vdg_mode(text, sizeof(text), &n, c->pia1_b, c->video, coco3, colours, &count);
+        if (!coco3 && (c->pia1_b & 0xF0) == 0xF0 && s_cfg.artifacts != COCO_ARTIFACT_OFF) {
+            add(text, sizeof(text), &n, "; artifact colours");
+        }
+    } else {
+        static const uint8_t bytes_for[8] = { 16, 20, 32, 40, 64, 80, 128, 160 };
+        static const uint8_t lpr[8] = { 1, 1, 2, 8, 9, 10, 11, 0 };
+        uint8_t vmode = c->gime[8], vres = c->gime[9];
+        unsigned lines = (vres & 0x60) == 0x20 ? 200 : (vres & 0x60) == 0x60 ? 225 : 192;
+        if (vmode & 0x80) {
+            unsigned bytes = bytes_for[(vres >> 2) & 7], cres = vres & 3;
+            unsigned bpp = cres == 0 ? 1 : cres == 1 ? 2 : 4;
+            if (bytes >= 128 && bpp == 1) {
+                bpp = 2;
+            }
+            unsigned width = bytes * 8 / bpp, ncolours = 1u << bpp, rows = lpr[vmode & 7] ? lines / lpr[vmode & 7] : 1;
+            add(text, sizeof(text), &n, "Graphics %u × %u, %u colours", width, rows, ncolours);
+            int hscreen = width == 320 ? (ncolours == 4 ? 1 : ncolours == 16 ? 2 : 0) :
+                          width == 640 ? (ncolours == 2 ? 3 : ncolours == 4 ? 4 : 0) : 0;
+            if (hscreen && rows == 192) {
+                add(text, sizeof(text), &n, " (HSCREEN %d)", hscreen);
+            }
+            for (unsigned i = 0; i < ncolours; i++) {
+                colours[count++] = i;
+            }
+        } else {
+            static const uint8_t cols_for[4] = { 32, 40, 64, 80 };
+            unsigned cols = cols_for[((vres >> 2) & 1) | ((vres >> 3) & 2)];
+            unsigned rows = lpr[vmode & 7] ? lines / lpr[vmode & 7] : 1;
+            add(text, sizeof(text), &n, "Text %u × %u%s", cols, rows, (vres & 1) ? " with attributes" : "");
+            if (cols == 40 || cols == 80) {
+                add(text, sizeof(text), &n, " (WIDTH %u)", cols);
+            }
+            for (int i = 0; i < ((vres & 1) ? 16 : 2); i++) {
+                colours[count++] = i;
+            }
+        }
+        add(text, sizeof(text), &n, "; screen at $%05lX", (unsigned long)c->video);
+    }
+    emu_json_row(j, "Screen", text);
+
+    /* the mode's colours: the VDG's (the CoCo 3's from its palette) */
+    n = 0;
+    if (coco3 && !legacy) {
+        add(text, sizeof(text), &n, "Border");
+        swatch(text, sizeof(text), &n, c->gime[0xA] & 0x3F);
+        add(text, sizeof(text), &n, "; palette");
+    } else {
+        add(text, sizeof(text), &n, "Colours");
+    }
+    for (int i = 0; i < count; i++) {
+        swatch(text, sizeof(text), &n, coco3 ? c->palette[colours[i]] & 0x3F : 64 + colours[i]);
+    }
+    if (!coco3 && (c->pia1_b & 0xF0) == 0xF0 && s_cfg.artifacts != COCO_ARTIFACT_OFF) {
+        add(text, sizeof(text), &n, ", artifacts");
+        swatch(text, sizeof(text), &n, (c->pia1_b & 0x08) ? 80 : 82);
+        swatch(text, sizeof(text), &n, (c->pia1_b & 0x08) ? 81 : 83);
+    }
+    emu_json_row(j, "Palette", text);
+}
+
+static void sound_row(emu_json_t *j, const coco_chips_t *c)
+{
+    static const char *const sources[4] = { "the DAC", "the cassette", "the cartridge", "nothing" };
+    char text[200];
+    size_t n = 0;
+    add(text, sizeof(text), &n, "%s%s; DAC %u of 63%s", c->sound_on ? "On, from " : "Off",
+        c->sound_on ? sources[c->mux & 3] : "", c->dac, c->single_bit ? ", single bit high" : "");
+    if (c->hz) {
+        add(text, sizeof(text), &n, "; about %u Hz, loudness %u%%", c->hz, c->loudness);
+    } else if (c->loudness) {
+        add(text, sizeof(text), &n, "; loudness %u%%", c->loudness);
+    } else {
+        add(text, sizeof(text), &n, "; silent");
+    }
+    emu_json_row(j, "Sound", text);
+}
+
+/* The PIAs' interrupts (FS, HS on PIA0 to IRQ; CD, CART on PIA1 to FIRQ)
+ * and the GIME's
+ */
+static void interrupts_row(emu_json_t *j, const coco_chips_t *c, bool coco3)
+{
+    static const char *const gime_names[6] = { "EI0", "EI1", "EI2", "VBORD", "HBORD", "TMR" };
+    char text[300];
+    size_t n = 0;
+    bool fs = c->pia_ctl[0][1] & 1, hs = c->pia_ctl[0][0] & 1, cd = c->pia_ctl[1][0] & 1, cart = c->pia_ctl[1][1] & 1;
+    add(text, sizeof(text), &n, "PIA IRQ:%s%s%s; FIRQ:%s%s%s", fs ? " FS" : "", hs ? " HS" : "",
+        fs || hs ? "" : " none", cd ? " CD" : "", cart ? " CART" : "", cd || cart ? "" : " none");
+    if (coco3) {
+        for (int f = 0; f < 2; f++) {
+            uint8_t on = (c->gime[0] & (f ? 0x10 : 0x20)) ? c->gime[2 + f] & 0x3F : 0;
+            add(text, sizeof(text), &n, f ? "; FIRQ:" : "; GIME IRQ:");
+            for (int i = 5; i >= 0; i--) {
+                if (on & (1 << i)) {
+                    add(text, sizeof(text), &n, " %s", gime_names[i]);
+                }
+            }
+            if (!on) {
+                add(text, sizeof(text), &n, " none");
+            }
+        }
+        unsigned value = ((c->gime[4] & 15) << 8) | c->gime[5];
+        if (value) {
+            /* from value + 2 to 0: 63.5 us or 279 ns a count */
+            unsigned long ns = (value + 2ul) * ((c->gime[1] & 0x20) ? 279ul : 63500ul);
+            add(text, sizeof(text), &n, "; timer $%03X (%lu.%lu ms)", value, ns / 1000000, ns / 100000 % 10);
+        }
+    }
+    emu_json_row(j, "Interrupts", text);
+}
 
 static void status(emu_json_t *j, int section)
 {
-    char text[160];
+    char text[300];
     coco_status_t s;
     coco_get_status(&s);
     coco_media_status_t m;
     coco_media_status(&m);
     if (section == EMU_STATUS_ROWS) {
-        snprintf(text, sizeof(text), "%s, %s, %lu KB", s_cfg.model == COCO_MODEL_3 ? "Color Computer 3" : "Color Computer 2",
-                 s_cfg.h6309 ? "Hitachi 6309" : "Motorola 6809", (unsigned long)s_cfg.ram_kb);
+        coco_chips_t c;
+        coco_get_chips(&c);
+        bool coco3 = s_cfg.model == COCO_MODEL_3;
+        snprintf(text, sizeof(text), "Color Computer %d: a %s at %s MHz%s, %lu KB RAM, %s", coco3 ? 3 : 2,
+                 s_cfg.h6309 ? "Hitachi 6309" : "Motorola 6809", s.fast ? "1.79" : "0.89",
+                 s.native ? " (native)" : "", (unsigned long)s_cfg.ram_kb,
+                 coco3 ? "GIME, two PIAs" : "SAM, VDG, two PIAs");
         emu_json_row(j, "System", text);
-        emu_json_row(j, "ROMs", s_rom_text);
-        snprintf(text, sizeof(text), "%s%s", s.fast ? "1.79 MHz" : "0.89 MHz", s.native ? ", 6309 native mode" : "");
-        emu_json_row(j, "CPU", text);
-        snprintf(text, sizeof(text), "the %s one: mouse, touchpad and the numeric keypad (F11 switches)",
-                 settings.joystick ? "left" : "right");
+        rom_row(j, &c, coco3);
+        memory_row(j, &c, coco3);
+        screen_rows(j, &c, coco3);
+        sound_row(j, &c);
+        interrupts_row(j, &c, coco3);
+        size_t n = 0;
+        add(text, sizeof(text), &n, "Letters by position, symbols as typed (US); Esc or Pause BREAK, Home CLEAR, "
+            "Caps Lock SHIFT+0; F5 reset");
+        emu_json_row(j, "Keyboard", text);
+        int x = s_mouse_x, y = s_mouse_y;
+        x = (s_pad & 0x04) ? 0 : (s_pad & 0x08) ? 63 : x;
+        y = (s_pad & 0x01) ? 0 : (s_pad & 0x02) ? 63 : y;
+        snprintf(text, sizeof(text), "The %s one: mouse, touchpad, keypad (0, 5 button), F11 swaps; at %d, %d%s",
+                 settings.joystick ? "left" : "right", x, y,
+                 (s_mouse_buttons & 3) || (s_pad & 0x10) ? ", button down" : "");
         emu_json_row(j, "Joystick", text);
-        emu_json_row(j, "Slot", coco_cart_path() ? "ROM cartridge" : coco_disk_controller() ? "Disk controller"
-                                                                                             : "empty");
+        n = 0;
+        add(text, sizeof(text), &n, "%s; .VHD hard disk at $FF80; .CAS tapes", coco_cart_path() ?
+            "A ROM cartridge in the slot" : coco_disk_controller() ? "Disk controller (WD1793): two .DSK drives" :
+            "The slot empty");
+        emu_json_row(j, "Disks", text);
         return;
     }
     uint64_t free_bytes, size;

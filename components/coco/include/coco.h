@@ -97,6 +97,28 @@ void coco_reset(void);          /* power off and on */
 void coco_warm_reset(void);     /* the reset button (at the next frame) */
 void coco_run_frame(void);
 void coco_get_status(coco_status_t *status);
+
+/* The chips as they are now, for the web page's status: plain copies of
+ * their registers (any task may ask; a few cycles old at worst)
+ */
+typedef struct {
+    uint16_t sam;               /* the SAM's 16 bits (the GIME keeps them too) */
+    uint8_t pia_ctl[2][2];      /* PIA0 and PIA1 CRA, CRB (bit 0: the interrupt on) */
+    uint8_t pia1_b;             /* the VDG's mode lines (PIA1 PB) */
+    uint32_t video;             /* the picture's address as this frame began (CoCo 3; CoCo 2: the SAM's F bits) */
+    uint8_t gime[16];           /* CoCo 3: $FF90-$FF9F */
+    uint8_t mmu[16];            /* $FFA0-$FFAF */
+    uint8_t palette[16];        /* $FFB0-$FFBF */
+    /* the sound */
+    uint8_t dac;                /* the 6-bit DAC (PIA1 PA7-2) */
+    bool sound_on;              /* SNDEN (PIA1 CB2) */
+    uint8_t mux;                /* the source (PIA0 CA2, CB2): 0 the DAC, 1 the cassette, 2 the cartridge, 3 none */
+    bool single_bit;            /* PIA1 PB1, an output, high */
+    uint16_t hz;                /* the sound played over the last ~65 ms: its pitch (0: none) */
+    uint8_t loudness;           /* and its loudness, 0-100 */
+} coco_chips_t;
+
+void coco_get_chips(coco_chips_t *chips);
 uint8_t coco_peek(uint16_t address);    /* as the CPU sees it, no side effects */
 void coco_set_monitor(coco_monitor_t monitor);
 void coco_set_artifacts(coco_artifact_t artifacts);

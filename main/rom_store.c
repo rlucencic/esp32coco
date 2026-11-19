@@ -125,3 +125,8 @@ bool rom_store_is_rom(const char *name)
     }
     return false;
 }
+
+bool rom_store_from_sd(rom_id_t id)
+{
+    return id < ROM_COUNT && s_found[id] != NULL;
+}

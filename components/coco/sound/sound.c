@@ -97,6 +97,47 @@ void COCO_HOT sound_line_end(void)
     advance(coco.line_tick + LINE_TICKS);
 }
 
+/* The sound's lines, and what was played over the last 2048 samples: its
+ * loudness and its pitch, from the crossings of a third of its peak either
+ * way (the DC blocker's output swings around 0)
+ */
+void sound_get_state(coco_chips_t *c)
+{
+    c->dac = pia_output(1, 0) >> 2;
+    c->sound_on = pia_c2(1, 1);
+    c->mux = (pia_c2(0, 0) ? 1 : 0) | (pia_c2(0, 1) ? 2 : 0);
+    c->single_bit = (pia[1].ddr[1] & 0x02) && (pia[1].out[1] & 0x02);
+    enum { N = 2048 };
+    if (!snd.enabled || !snd.ring) {
+        return;
+    }
+    uint32_t head = __atomic_load_n(&snd.head, __ATOMIC_ACQUIRE);
+    int peak = 0;
+    for (int i = 0; i < N; i++) {
+        int s = snd.ring[(head - N + i) % RING];
+        peak = s > peak ? s : -s > peak ? -s : peak;
+    }
+    if (peak < 256) {
+        return;
+    }
+    int threshold = peak / 3, side = 0, crossings = 0, first = 0, last = 0;
+    for (int i = 0; i < N; i++) {
+        int s = snd.ring[(head - N + i) % RING];
+        int now = s > threshold ? 1 : s < -threshold ? -1 : side;
+        if (now != side && side != 0) {
+            if (crossings++ == 0) {
+                first = i;
+            }
+            last = i;
+        }
+        side = now;
+    }
+    c->loudness = (uint8_t)(peak >= 16384 ? 100 : peak * 100 / 16384);
+    if (crossings >= 3) {
+        c->hz = (uint16_t)((uint32_t)(crossings - 1) * COCO_AUDIO_HZ / (2u * (uint32_t)(last - first)));
+    }
+}
+
 void coco_audio_enable(bool enable)
 {
     snd.enabled = enable;

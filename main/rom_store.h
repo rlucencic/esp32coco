@@ -24,5 +24,8 @@ uint32_t rom_store_size(rom_id_t id);
 /* The whole ROM into buf; false if there's none */
 bool rom_store_load(rom_id_t id, uint8_t *buf);
 
+/* The last load came from the SD card (not the flash) */
+bool rom_store_from_sd(rom_id_t id);
+
 /* A built-in ROM's file name (either version): an override, not a cartridge */
 bool rom_store_is_rom(const char *name);

@@ -45,6 +45,16 @@ bash -c '. $IDF_PATH/export.sh >/dev/null 2>&1; \
 - `../esp32emu/tools/emu_console.py PORT log N | lcd F.png | send "cmd" | info | profile ELF`
   with the IDF venv's Python (`-I`).
 - Flashing restarts the board and ends the user's session: say so first.
+- The web page's machine card (`status()` in `main/main.c`, the chips
+  through `coco_get_chips()`): System, ROM (from the flash or the SD card,
+  what's in the map now), Memory (the SAM's bits, or INIT0 and the MMU's
+  task), Screen (the VDG's mode with its PMODE, or the GIME's with
+  HSCREEN/WIDTH, where it is), Palette (the mode's colours as swatches: the
+  VDG's, the GIME's palette and border), Sound (SNDEN, the mux, the DAC;
+  the pitch and loudness of the last 2048 samples played, from their
+  crossings), Interrupts (PIA, GIME, its timer), Keyboard, Joystick,
+  Disks. The whole reply must fit esp32emu's 4 KB: the rows are at most
+  ~1.8 KB (a CoCo 3 in a 16-colour mode: its 17 swatches are half).
 
 Console commands: the shared ones (`emu/console.h`: `t x y [ms]` touches,
 `r` reset, `p` profile, ...) and the CoCo's (`main/main.c`): `k <n>` tap a
