@@ -43,6 +43,7 @@ STE), [esp32mac](https://github.com/rlucencic/esp32mac) (Macintosh Plus, SE,
 Classic), [esp32mac2](https://github.com/rlucencic/esp32mac2) (Macintosh LC
 and II), [esp32mac3](https://github.com/rlucencic/esp32mac3) (Macintosh LC II
 and LC III), [esp32cpc](https://github.com/rlucencic/esp32cpc) (Amstrad CPC),
+[esp32oric](https://github.com/rlucencic/esp32oric) (Oric Atmos and Oric-1),
 [esp32zx](https://github.com/rlucencic/esp32zx) (ZX Spectrum),
 [esp32cbm](https://github.com/rlucencic/esp32cbm) (Commodore 64 and 128),
 [esp32xl](https://github.com/rlucencic/esp32xl) (Atari 800XL and 130XE),
