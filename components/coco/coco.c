@@ -124,8 +124,7 @@ void coco_update_interrupts(void)
             firq |= INT_GIME;
         }
     }
-    coco.cpu.irq = irq;
-    coco.cpu.firq = firq;
+    m6809_set_interrupts(&coco.cpu, irq, firq);     /* when they rose: m6809.h */
 }
 
 void coco_event_changed(void)

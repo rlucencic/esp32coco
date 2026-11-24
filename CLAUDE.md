@@ -210,9 +210,16 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   cartridges write palette 0 one cycle later each two-line block (and
   eight colours a line with `--stripes`), checked against the formula
   pixel for pixel. Compared with a locally patched XRoar (`--bin`, its null
-  UI writing a PNG; not in the repo): the same within ~1 cycle once our
-  6809 leaves SYNC 3 cycles later as XRoar's does. MaTouch at 60 fps, its
-  pictures identical to the host's. [The measurement](docs/gime-raster-2026-11-24.md)
+  UI writing a PNG; not in the repo): the same within ~1 cycle (the 6809
+  core's interrupt timing below). MaTouch at 60 fps, its pictures
+  identical to the host's. [The measurement](docs/gime-raster-2026-11-24.md)
+- **The 6809's interrupt timing (2026-11-24)**, esp32emu's core after the
+  data sheet's cycle-by-cycle sequences (XRoar's): the CoCo sets its lines
+  through `m6809_set_interrupts()`; a rise between runs counts from the
+  event that ended the run. Disk BASIC's byte loop, NitrOS-9 EOU 1.0.1
+  (6809 and 6309, from `68EMU.dsk`/`63EMU.DSK` and the VHD: mdir, dir,
+  free, makdir) and the replays' pictures the same as before; their PCM
+  within 3 samples. [The change](docs/cpu-interrupt-timing-2026-11-24.md)
 - **Free disk space** (web page, `space/space.c`): floppies OS-9, then
   RS-DOS; the VHD OS-9; counted at insert, eject and after a flush. Host:
   FREE(0)/FREE(1) and NitrOS-9's `free`; Tab5 (2026-10-21): an OS-9
@@ -224,8 +231,7 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
 - Broader game coverage, commercial cartridges (bank-switched ones over 32 KB), Multi-Pak
   (cartridge and disk controller together), DriveWire, RS-232.
 - VDK floppies; DMK writes, single density and rotation timing (TODO.md);
-  mid-line changes other than the GIME's palette; the 6809's interrupt and
-  SYNC latency (TODO.md).
+  mid-line changes other than the GIME's palette.
 - A web page screenshot for the README (served from a local mock, as the
   other projects did: never the live board's page).
 

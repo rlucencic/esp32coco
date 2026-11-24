@@ -32,6 +32,7 @@ from pathlib import Path
 BLOCKS = 88
 SKIP = 78
 RESTORE_CYCLE = 178
+SYNC_EXIT = 3       # the 6809 goes on 3 cycles after HBORD's FIRQ is latched (m6809.h)
 COL_A, COL_B, MARK, BORDER = 0x00, 0x3F, 0x12, 0x24
 STRIPES = (0x3F, 0x24, 0x12, 0x09, 0x36, 0x2D, 0x1B, 0x07)    # --stripes: 7 cycles apart
 
@@ -213,19 +214,20 @@ def check(path, first, left=0, width=None):
 
 def expected(d, mode):
     """What gime_video.c draws for block D's palette writes (1.79 MHz:
-    8 pixels a cycle; HBORD where the picture ends, 912 pixels a line)."""
+    8 pixels a cycle; HBORD where the picture ends, 912 pixels a line;
+    cycles from SYNC's end, SYNC_EXIT after HBORD)."""
     left = (640 - mode) // 2
 
     def into(cycle):
         return 8 * cycle - (912 - mode)
-    x = into(d + 11)
+    x = into(SYNC_EXIT + d + 11)
     if x <= 0:
         first = (left, left + mode - 1)
     elif x < mode:
         first = (left + x, left + mode - 1)
     else:
         first = None
-    x2 = into(RESTORE_CYCLE - 114)
+    x2 = into(SYNC_EXIT + RESTORE_CYCLE - 114)
     second = (left, left + x2 - 1) if x < mode else (left + max(x - 912, 0), left + x2 - 1)
     return first, second
 
@@ -279,8 +281,8 @@ def expect_stripes(path, first, mode):
         d = first + block
         # each write's pixel from the first line's picture start (the second
         # line's starts 912 later); a pixel shows the last write at or before it
-        writes = [(8 * (d + 11 + 7 * k) - (912 - mode), c) for k, c in enumerate(STRIPES)]
-        writes.append((8 * RESTORE_CYCLE - (912 - mode), COL_A))
+        writes = [(8 * (SYNC_EXIT + d + 11 + 7 * k) - (912 - mode), c) for k, c in enumerate(STRIPES)]
+        writes.append((8 * (SYNC_EXIT + RESTORE_CYCLE) - (912 - mode), COL_A))
 
         def shown(at):
             c = COL_A

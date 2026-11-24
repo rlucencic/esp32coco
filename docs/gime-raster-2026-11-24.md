@@ -87,8 +87,10 @@ leaves SYNC three cycles late, the following held.
 - Border edges were within 2 pixels; XRoar's 512-pixel area sits 2 pixels
   left of centre.
 
-Matching the 6809's interrupt and SYNC timing is a change to esp32emu's
-shared core, listed in `TODO.md`.
+The shared core now has that timing: see
+[the 6809's interrupt timing](cpu-interrupt-timing-2026-11-24.md). With it,
+`check-raster`'s expected positions include SYNC's 3 cycles, and ours and
+XRoar's edges are 6 to 10 pixels apart.
 
 ### Checks and controls
 
