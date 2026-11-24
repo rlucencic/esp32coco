@@ -21,6 +21,13 @@ all: $(BUILD)/coco_host
 $(BUILD)/coco_host: host_main.c $(COCO_OBJS)
 	$(CC) $(CFLAGS) $^ -lm -lpthread -o $@
 
+$(BUILD)/dmk_test: dmk_test.c $(COCO_OBJS)
+	$(CC) $(CFLAGS) $^ -lm -lpthread -o $@
+
+check-dmk: $(BUILD)/dmk_test
+	python3 dmk_fixture.py $(BUILD)/fixture.dmk $(BUILD)/invalid.dmk
+	./$(BUILD)/dmk_test $(BUILD)/fixture.dmk $(BUILD)/invalid.dmk
+
 $(BUILD)/coco/%.o: $(COCO)/%.c $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -41,4 +48,4 @@ $(BUILD)/diskspace_coco.o: $(DISKSPACE)/coco.c $(DISKSPACE)/include/diskspace.h
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean
+.PHONY: all check-dmk clean

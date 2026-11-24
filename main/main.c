@@ -389,7 +389,7 @@ static const char *const *choice_names(int i)
 
 enum { DRIVE_0, DRIVE_1, DRIVE_HD, DRIVE_CAS, DRIVE_CART, DRIVES };
 
-static const char *const extensions[] = { ".dsk", ".os9", ".vhd", ".cas", ".rom", ".ccc", ".bin", NULL };
+static const char *const extensions[] = { ".dsk", ".os9", ".dmk", ".vhd", ".cas", ".rom", ".ccc", ".bin", NULL };
 static const char *const cart_extensions[] = { ".rom", ".ccc", ".bin", NULL };     /* in coco/roms */
 static const char *const drive_names[] = { "Floppy 0", "Floppy 1", "Hard disk", "Cassette", "Cartridge" };
 
@@ -427,7 +427,7 @@ static bool is_cart(const char *name)
 
 static bool accepts(int drive, const char *name)
 {
-    static const char *const floppy[] = { ".dsk", ".os9", NULL };
+    static const char *const floppy[] = { ".dsk", ".os9", ".dmk", NULL };
     static const char *const hd[] = { ".vhd", NULL };
     static const char *const tape[] = { ".cas", NULL };
     switch (drive) {
@@ -530,7 +530,7 @@ static const disks_config_t disks = {
     .folder = "coco",
     .extensions = extensions,
     .cart_extensions = cart_extensions,
-    .description = "Disks (.DSK .VHD), tapes (.CAS), cartridges (.ROM .CCC)",
+    .description = "Disks (.DSK .DMK .VHD), tapes (.CAS), cartridges (.ROM .CCC)",
     .title = "Drives",
     .button = "Drives",
     .nvs_namespace = "cocodisks",
@@ -870,7 +870,7 @@ static void status(emu_json_t *j, int section)
         emu_json_row(j, "Joystick", text);
         n = 0;
         add(text, sizeof(text), &n, "%s; .VHD hard disk at $FF80; .CAS tapes", coco_cart_path() ?
-            "A ROM cartridge in the slot" : coco_disk_controller() ? "Disk controller (WD1793): two .DSK drives" :
+            "A ROM cartridge in the slot" : coco_disk_controller() ? "Disk controller (WD1793): two floppy drives" :
             "The slot empty");
         emu_json_row(j, "Disks", text);
         return;

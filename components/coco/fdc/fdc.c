@@ -23,9 +23,18 @@
  * one, an OS-9 disk's LSN 0 says whether it has two sides; RS-DOS disks have
  * one. Kept in memory; written tracks go back to the file at
  * coco_media_flush().
+ *
+ * .DMK (read only, double density, 5.25"): a 16-byte header, then each
+ * track (side 0, side 1, next track) as a table of 64 pointers to its IDs'
+ * $FE bytes and the track's raw bytes. Read Sector takes the ID that
+ * matches the track and sector registers (the ID's track, not the head's),
+ * CRCs and the deleted-data mark as stored; Read Address the IDs in turn,
+ * Read Track the raw bytes. No rotation: a sector is found after the same
+ * short search wherever its ID is on the track.
  */
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include "coco_internal.h"
 
 #define BYTE_TICKS      115             /* 32 us */
@@ -36,6 +45,11 @@
 #define INDEX_TICKS     (3580 * 4)
 #define TRACK_BYTES     6250            /* a double density track (write track) */
 #define MAX_TRACKS      86
+#define DMK_HEADER      16
+#define DMK_ID_TABLE    128
+#define DMK_TRACK_MAX   0x1900
+#define DMK_DAM_WINDOW  43              /* MFM: bytes after the ID's CRC */
+#define FDC_BUFFER_SIZE (DMK_TRACK_MAX - DMK_ID_TABLE)
 
 bool coco_fdc_log;                      /* host builds: print the commands */
 
@@ -45,6 +59,9 @@ typedef struct {
     uint32_t size;
     uint32_t header;                    /* bytes */
     int tracks, sides, spt, ssize, first;
+    unsigned dmk_track_size;
+    unsigned dmk_next_id;
+    int dmk_address_track;
     bool read_only;
     uint8_t dirty[MAX_TRACKS * 2 / 8 + 1];
     bool any_dirty;
@@ -75,7 +92,7 @@ static struct {
     uint16_t taken_pc;
     int target;                         /* type I: the track to reach */
     int direction;                      /* +1 in, -1 out */
-    uint8_t *buf;                       /* TRACK_BYTES, in PSRAM (internal RAM is short) */
+    uint8_t *buf;                       /* a full raw or formatted track in PSRAM */
     int pos, len;                       /* in buf */
     uint32_t track_pos;                 /* write track: bytes so far */
     int light;
@@ -105,7 +122,7 @@ static int selected_index(void)
 /* The offset of a sector (number as on the disk), or -1 */
 static long sector_offset(const drive_t *d, int track, int side, int sector)
 {
-    if (!d->data || track < 0 || track >= d->tracks || side >= d->sides) {
+    if (!d->data || d->dmk_track_size || track < 0 || track >= d->tracks || side >= d->sides) {
         return -1;
     }
     int s = sector - d->first;
@@ -157,6 +174,50 @@ static void geometry(drive_t *d)
     }
 }
 
+static unsigned le16(const uint8_t *data)
+{
+    return data[0] | (unsigned)data[1] << 8;
+}
+
+/* 5.25-inch, double-density DMK. The IDAM table locates the FE bytes.
+ * Check every offset before the controller reads a table or raw track.
+ */
+static bool dmk_geometry(drive_t *d)
+{
+    const uint8_t *image = d->data;
+    unsigned track_size = le16(image + 2);
+    unsigned tracks = image[1];
+    unsigned sides = image[4] & 0x10 ? 1 : 2;
+    if (!tracks || tracks > MAX_TRACKS || track_size < DMK_ID_TABLE || track_size > DMK_TRACK_MAX ||
+        (image[4] & ~0x10) || image[12] || image[13] || image[14] || image[15] ||
+        d->size != DMK_HEADER + tracks * sides * track_size) {
+        return false;
+    }
+    for (unsigned n = 0; n < tracks * sides; n++) {
+        const uint8_t *track = image + DMK_HEADER + n * track_size;
+        unsigned end = DMK_ID_TABLE;
+        for (unsigned i = 0; i < DMK_ID_TABLE; i += 2) {
+            unsigned entry = le16(track + i);
+            if (!entry) {
+                end = track_size;
+                continue;
+            }
+            unsigned offset = entry & 0x3FFF;
+            if (!(entry & 0x8000) || offset < end || offset + 7 > track_size || track[offset] != 0xFE) {
+                return false;
+            }
+            end = offset + 7;
+        }
+    }
+    d->tracks = (int)tracks;
+    d->sides = (int)sides;
+    d->dmk_track_size = track_size;
+    d->dmk_address_track = -1;
+    d->dmk_next_id = 0;
+    d->read_only = true;
+    return true;
+}
+
 bool coco_disk_insert(int drive, const char *path)
 {
     if (drive < 0 || drive >= COCO_DRIVES) {
@@ -164,9 +225,11 @@ bool coco_disk_insert(int drive, const char *path)
     }
     drive_t *d = &s_drives[drive];
     coco_disk_eject(drive);
-    bool ro = false;
-    FILE *f = fopen(path, "r+b");
-    if (!f) {
+    const char *ext = strrchr(path, '.');
+    bool dmk = ext && strcasecmp(ext, ".dmk") == 0;
+    bool ro = dmk;
+    FILE *f = fopen(path, dmk ? "rb" : "r+b");
+    if (!f && !dmk) {
         f = fopen(path, "rb");
         ro = true;
     }
@@ -194,7 +257,14 @@ bool coco_disk_insert(int drive, const char *path)
     }
     d->size = (uint32_t)size;
     d->read_only = ro;
-    geometry(d);
+    if (dmk) {
+        if (!dmk_geometry(d)) {
+            coco_disk_eject(drive);
+            return false;
+        }
+    } else {
+        geometry(d);
+    }
     snprintf(d->path, sizeof(d->path), "%s", path);
     memset(d->dirty, 0, sizeof(d->dirty));
     d->any_dirty = false;
@@ -235,6 +305,7 @@ void coco_disk_eject(int drive)
     flush_drive(d);
     free(d->data);
     d->data = NULL;
+    d->dmk_track_size = 0;
     d->path[0] = 0;
     space_update(drive);
 }
@@ -298,7 +369,7 @@ void coco_disks_flush(void)
 uint64_t fdc_disk_bytes(int drive, bool one_side)
 {
     const drive_t *d = drive >= 0 && drive < COCO_DRIVES ? &s_drives[drive] : NULL;
-    if (d == NULL || d->data == NULL || d->ssize != 256) {
+    if (d == NULL || d->data == NULL || d->dmk_track_size || d->ssize != 256) {
         return 0;
     }
     return (uint64_t)d->tracks * (one_side ? 1 : d->sides) * d->spt * 256;
@@ -497,7 +568,7 @@ static void start_type2(uint8_t cmd)
         finish(0x80);
         return;
     }
-    if ((cmd & 0xE0) == 0xA0 && d->read_only) {
+    if (d->read_only && ((cmd & 0xE0) == 0xA0 || (cmd & 0xF0) == 0xF0)) {
         finish(0x40);
         return;
     }
@@ -506,11 +577,119 @@ static void start_type2(uint8_t cmd)
     schedule(SEARCH_TICKS + ((cmd & 0x04) ? SETTLE_TICKS : 0));
 }
 
+/* MFM CRC-CCITT, primed with the three A1 sync marks. A valid stream
+ * including its two stored CRC bytes has a zero remainder.
+ */
+static bool dmk_crc_ok(const uint8_t *bytes, unsigned len)
+{
+    uint16_t crc = 0xCDB4;
+    while (len--) {
+        crc ^= (uint16_t)*bytes++ << 8;
+        for (int bit = 0; bit < 8; bit++) {
+            crc = (uint16_t)((crc << 1) ^ ((crc & 0x8000) ? 0x1021 : 0));
+        }
+    }
+    return crc == 0;
+}
+
+static void start_read(const uint8_t *bytes, int len, uint8_t status)
+{
+    memcpy(fdc.buf, bytes, (size_t)len);
+    fdc.pos = 0;
+    fdc.len = len;
+    fdc.status = (uint8_t)((fdc.status & ~0x20) | status);
+    fdc.state = ST_READ;
+    schedule(BYTE_TICKS);
+}
+
+static void dmk_read(drive_t *d, int side, uint8_t cmd)
+{
+    if (d->head >= d->tracks || side >= d->sides) {
+        finish(0x10);
+        return;
+    }
+    int physical_track = d->head * d->sides + side;
+    unsigned track_size = d->dmk_track_size;
+    const uint8_t *track = d->data + DMK_HEADER + physical_track * track_size;
+    if ((cmd & 0xF0) == 0xE0) {
+        start_read(track + DMK_ID_TABLE, (int)track_size - DMK_ID_TABLE, 0);
+        return;
+    }
+    if ((cmd & 0xF0) == 0xC0) {
+        if (d->dmk_address_track != physical_track) {
+            d->dmk_address_track = physical_track;
+            d->dmk_next_id = 0;
+        }
+        unsigned entry = le16(track + d->dmk_next_id);
+        if (!entry) {
+            d->dmk_next_id = 0;
+            entry = le16(track);
+        }
+        if (entry) {
+            const uint8_t *id = track + (entry & 0x3FFF);
+            d->dmk_next_id = (d->dmk_next_id + 2) % DMK_ID_TABLE;
+            fdc.sector = id[1];
+            start_read(id + 1, 6, dmk_crc_ok(id, 7) ? 0 : 0x08);
+            return;
+        }
+        finish(0x10);
+        return;
+    }
+    uint8_t error = 0x10;
+    for (unsigned i = 0; i < DMK_ID_TABLE && le16(track + i); i += 2) {
+        unsigned offset = le16(track + i) & 0x3FFF;
+        const uint8_t *id = track + offset;
+        if (id[1] != fdc.track || id[3] != fdc.sector ||
+            ((cmd & 0x02) && id[2] != ((cmd >> 3) & 1))) {
+            continue;
+        }
+        if (!dmk_crc_ok(id, 7)) {
+            error |= 0x08;
+            continue;
+        }
+        /* The 1793 knows sizes 0-3 and uses the low two bits (as MAME) */
+        unsigned len = 128u << (id[4] & 3);
+        /* The data mark (after three A1s) must come within 43 bytes of
+         * the ID's last CRC byte, else the 1793 looks for the next ID. The
+         * field is then read whatever follows: it may run over the next
+         * sector's ID (overlapping sectors), but not past the track's end.
+         */
+        unsigned window = offset + 6 + DMK_DAM_WINDOW;
+        for (unsigned m = offset + 10; m <= window && m + 1 + len + 2 <= track_size; m++) {
+            uint8_t mark = track[m];
+            if ((mark != 0xFB && mark != 0xF8) || track[m - 1] != 0xA1 ||
+                track[m - 2] != 0xA1 || track[m - 3] != 0xA1) {
+                continue;
+            }
+            uint8_t status = mark == 0xF8 ? 0x20 : 0;
+            if (!dmk_crc_ok(track + m, 1 + len + 2)) {
+                status |= 0x08;
+            }
+            d->reads++;
+            start_read(track + m + 1, (int)len, status);
+            return;
+        }
+    }
+    finish(error);
+}
+
 static void begin_sector(void)
 {
     int side;
     drive_t *d = selected(&side);
     uint8_t cmd = fdc.command;
+    if (!d || !d->data) {
+        finish(0x80);
+        return;
+    }
+    if (d->dmk_track_size) {
+        if ((cmd & 0xE0) == 0xA0 || (cmd & 0xF0) == 0xF0) {
+            finish(0x40);
+        } else {
+            dmk_read(d, side, cmd);
+        }
+        return;
+    }
     if ((cmd & 0xF0) == 0xC0) {
         /* read address: the next sector's ID */
         static int next;
@@ -642,7 +821,7 @@ static void state_event(void)
             schedule(BYTE_TICKS);
             break;
         }
-        if ((fdc.command & 0xF0) == 0x90) {
+        if ((fdc.command & 0xF0) == 0x90 && !(fdc.status & 0x08)) {
             /* multiple: on to the next sector */
             fdc.sector++;
             begin_sector();
@@ -736,7 +915,7 @@ static void command(uint8_t cmd)
 void fdc_reset(void)
 {
     if (!fdc.buf) {
-        fdc.buf = coco_calloc(1, TRACK_BYTES);
+        fdc.buf = coco_calloc(1, FDC_BUFFER_SIZE);
     }
     fdc.dskreg = 0;
     fdc.status = 0;

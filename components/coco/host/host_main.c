@@ -10,7 +10,7 @@
  *   COCO_CPU=6309            a Hitachi 6309 (else the 6809)
  *   COCO_NODISK=1            no disk controller in the slot
  *   COCO_CART=<file>         a ROM cartridge
- *   COCO_FLOPPY0=, _FLOPPY1= disk images (.DSK)
+ *   COCO_FLOPPY0=, _FLOPPY1= disk images (.DSK, .DMK read only)
  *   COCO_HD=<file>           the VHD hard disk
  *   COCO_CAS=<file>          the cassette (.CAS)
  *   COCO_MONITOR=composite   the CoCo 3 on a TV (else RGB)

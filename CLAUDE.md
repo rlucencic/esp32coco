@@ -4,7 +4,7 @@ A CoCo 2 (64 KB, MC6847 VDG, MC6883 SAM) or CoCo 3 (128/512 KB, GIME) with
 a Motorola 6809 or Hitachi 6309, on two boards: the Makerfabs MaTouch
 ESP32-S3 7" (1024x600, target esp32s3, the default) and the M5Stack Tab5
 (ESP32-P4, 1280x720, target esp32p4). Cartridges, cassette (.CAS), two
-floppies (.DSK, WD1793 + Disk BASIC), an OS-9 hard disk (VHD interface),
+floppies (.DSK, .DMK read only; WD1793 + Disk BASIC), an OS-9 hard disk (VHD interface),
 Bluetooth keyboard and mouse, USB keyboard and mouse on the Tab5, an LVGL
 setup screen, a web page. ESP-IDF v5.5.6, C.
 
@@ -113,7 +113,9 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
 - `pia/pia.c`, `keyboard/keyboard.c` (matrix, typing queue), `joystick/`,
   `sound/sound.c` (DAC + single bit through the mux, averaged per half line,
   DC blocker, ring in PSRAM), `cartridge/`, `cassette/`, `fdc/` (WD1793 +
-  DSKREG, JVC images), `harddisk/vhd.c` (VHD at $FF80).
+  DSKREG, JVC images; DMK read only: IDs from the track's pointer table, the
+  data mark within 43 bytes of the ID, CRCs and deleted data as stored, no
+  rotation), `harddisk/vhd.c` (VHD at $FF80).
 - The frame is 640x240 colour numbers (0-63 CoCo 3, 64-79 VDG, 80-83
   artifact) in PSRAM; `coco_render_line_rgb565()` for the presenter.
 
@@ -181,6 +183,13 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   for both. The MaTouch exercises the touchpad-to-joystick path with
   console-injected touches and reports the DAC output for a BASIC tone.
   [Replays and checkpoints](docs/software-replay-2026-11-24.md)
+- **DMK reads (2026-11-24).** `make -C components/coco/host check-dmk`
+  (a fixture track: IDs out of order, deleted data, CRC errors, an
+  overlapping sector, a late data mark; no ROMs).
+  `components/coco/host/jvc2dmk.py` makes DMKs from JVC images: both
+  replays above give identical captures and PCM from either. Checked on
+  the MaTouch through the debugger and Disk BASIC.
+  [DMK reads](docs/dmk-reads-2026-11-24.md)
 - **Free disk space** (web page, `space/space.c`): floppies OS-9, then
   RS-DOS; the VHD OS-9; counted at insert, eject and after a flush. Host:
   FREE(0)/FREE(1) and NitrOS-9's `free`; Tab5 (2026-10-21): an OS-9
@@ -191,7 +200,8 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
 
 - Broader game coverage, commercial cartridges (bank-switched ones over 32 KB), Multi-Pak
   (cartridge and disk controller together), DriveWire, RS-232.
-- Floppy formats other than JVC (DMK, VDK); mid-line video changes.
+- VDK floppies; DMK writes, single density and rotation timing (TODO.md);
+  mid-line video changes.
 - A web page screenshot for the README (served from a local mock, as the
   other projects did: never the live board's page).
 
