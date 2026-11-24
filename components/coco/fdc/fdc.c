@@ -24,7 +24,8 @@
  * one. Kept in memory; written tracks go back to the file at
  * coco_media_flush().
  *
- * .DMK (read only, double density, 5.25"): a 16-byte header, then each
+ * DMK (read only, double density; found by its header and size, whatever
+ * the file's extension, as archives name them .dsk): a 16-byte header, then each
  * track (side 0, side 1, next track) as a table of 64 pointers to its IDs'
  * $FE bytes and the track's raw bytes. Read Sector takes the ID that
  * matches the track and sector registers (the ID's track, not the head's),
@@ -47,7 +48,7 @@
 #define MAX_TRACKS      86
 #define DMK_HEADER      16
 #define DMK_ID_TABLE    128
-#define DMK_TRACK_MAX   0x1900
+#define DMK_TRACK_MAX   0x2940          /* the format's largest (8"/HD); 5.25" DD: 0x1900 */
 #define DMK_DAM_WINDOW  43              /* MFM: bytes after the ID's CRC */
 #define FDC_BUFFER_SIZE (DMK_TRACK_MAX - DMK_ID_TABLE)
 
@@ -179,34 +180,49 @@ static unsigned le16(const uint8_t *data)
     return data[0] | (unsigned)data[1] << 8;
 }
 
-/* 5.25-inch, double-density DMK. The IDAM table locates the FE bytes.
- * Check every offset before the controller reads a table or raw track.
+/* A DMK (double density; any extension: the archives call most of them
+ * .dsk): the header and the file's size must agree. Each track's table of
+ * ID pointers is then cut down, in memory (DMKs are never written back),
+ * to the entries a controller in double density finds: double-density
+ * ones that point at an FE with the ID inside the track. Tools pad the
+ * table with other values ($0080: Diecom's) and a full table's last
+ * pointer can be off. No ID anywhere: not a DMK.
  */
 static bool dmk_geometry(drive_t *d)
 {
-    const uint8_t *image = d->data;
+    uint8_t *image = d->data;
     unsigned track_size = le16(image + 2);
     unsigned tracks = image[1];
     unsigned sides = image[4] & 0x10 ? 1 : 2;
-    if (!tracks || tracks > MAX_TRACKS || track_size < DMK_ID_TABLE || track_size > DMK_TRACK_MAX ||
-        (image[4] & ~0x10) || image[12] || image[13] || image[14] || image[15] ||
+    if (d->size < DMK_HEADER + DMK_ID_TABLE || !tracks || tracks > MAX_TRACKS || track_size < DMK_ID_TABLE ||
+        track_size > DMK_TRACK_MAX || (image[4] & ~0x10) || image[12] || image[13] || image[14] || image[15] ||
         d->size != DMK_HEADER + tracks * sides * track_size) {
         return false;
     }
-    for (unsigned n = 0; n < tracks * sides; n++) {
-        const uint8_t *track = image + DMK_HEADER + n * track_size;
-        unsigned end = DMK_ID_TABLE;
-        for (unsigned i = 0; i < DMK_ID_TABLE; i += 2) {
-            unsigned entry = le16(track + i);
-            if (!entry) {
-                end = track_size;
-                continue;
+    /* Count first: a file that isn't a DMK is left as it is */
+    for (int pass = 0; pass < 2; pass++) {
+        unsigned ids = 0;
+        for (unsigned n = 0; n < tracks * sides; n++) {
+            uint8_t *track = image + DMK_HEADER + n * track_size;
+            unsigned kept = 0;
+            for (unsigned i = 0; i < DMK_ID_TABLE; i += 2) {
+                unsigned entry = le16(track + i);
+                unsigned offset = entry & 0x3FFF;
+                if ((entry & 0x8000) && offset >= DMK_ID_TABLE && offset + 7 <= track_size && track[offset] == 0xFE) {
+                    if (pass) {
+                        track[kept] = (uint8_t)entry;
+                        track[kept + 1] = (uint8_t)(entry >> 8);
+                    }
+                    kept += 2;
+                }
             }
-            unsigned offset = entry & 0x3FFF;
-            if (!(entry & 0x8000) || offset < end || offset + 7 > track_size || track[offset] != 0xFE) {
-                return false;
+            if (pass) {
+                memset(track + kept, 0, DMK_ID_TABLE - kept);
             }
-            end = offset + 7;
+            ids += kept / 2;
+        }
+        if (!ids) {
+            return false;
         }
     }
     d->tracks = (int)tracks;
@@ -226,10 +242,10 @@ bool coco_disk_insert(int drive, const char *path)
     drive_t *d = &s_drives[drive];
     coco_disk_eject(drive);
     const char *ext = strrchr(path, '.');
-    bool dmk = ext && strcasecmp(ext, ".dmk") == 0;
-    bool ro = dmk;
-    FILE *f = fopen(path, dmk ? "rb" : "r+b");
-    if (!f && !dmk) {
+    bool dmk_name = ext && strcasecmp(ext, ".dmk") == 0;
+    bool ro = dmk_name;
+    FILE *f = fopen(path, dmk_name ? "rb" : "r+b");
+    if (!f && !dmk_name) {
         f = fopen(path, "rb");
         ro = true;
     }
@@ -257,19 +273,19 @@ bool coco_disk_insert(int drive, const char *path)
     }
     d->size = (uint32_t)size;
     d->read_only = ro;
-    if (dmk) {
-        if (!dmk_geometry(d)) {
-            coco_disk_eject(drive);
-            return false;
-        }
+    if (dmk_geometry(d)) {
+        ro = true;                      /* sets read_only */
+    } else if (dmk_name) {
+        coco_disk_eject(drive);
+        return false;
     } else {
         geometry(d);
     }
     snprintf(d->path, sizeof(d->path), "%s", path);
     memset(d->dirty, 0, sizeof(d->dirty));
     d->any_dirty = false;
-    COCO_LOG("drive %d: %s, %d tracks, %d side%s%s", drive, path, d->tracks, d->sides, d->sides > 1 ? "s" : "",
-             ro ? ", read only" : "");
+    COCO_LOG("drive %d: %s, %s, %d tracks, %d side%s%s", drive, path, d->dmk_track_size ? "DMK" : "JVC",
+             d->tracks, d->sides, d->sides > 1 ? "s" : "", ro ? ", read only" : "");
     space_update(drive);
     return true;
 }
@@ -649,16 +665,18 @@ static void dmk_read(drive_t *d, int side, uint8_t cmd)
         }
         /* The 1793 knows sizes 0-3 and uses the low two bits (as MAME) */
         unsigned len = 128u << (id[4] & 3);
-        /* The data mark (after three A1s) must come within 43 bytes of
-         * the ID's last CRC byte, else the 1793 looks for the next ID. The
-         * field is then read whatever follows: it may run over the next
-         * sector's ID (overlapping sectors), but not past the track's end.
+        /* The data mark (after A1s) must come within 43 bytes of the ID's
+         * last CRC byte, else the 1793 looks for the next ID. The field is
+         * then read whatever follows: it may run over the next sector's ID
+         * (overlapping sectors), but not past the track's end. Two A1s are
+         * enough: images made with Read Track (Carl England's Defeater
+         * kits) hold the first of the three as $14, $C2 or $02 (its clock
+         * bits read as data), their CRCs still over three A1s.
          */
         unsigned window = offset + 6 + DMK_DAM_WINDOW;
         for (unsigned m = offset + 10; m <= window && m + 1 + len + 2 <= track_size; m++) {
             uint8_t mark = track[m];
-            if ((mark != 0xFB && mark != 0xF8) || track[m - 1] != 0xA1 ||
-                track[m - 2] != 0xA1 || track[m - 3] != 0xA1) {
+            if ((mark != 0xFB && mark != 0xF8) || track[m - 1] != 0xA1 || track[m - 2] != 0xA1) {
                 continue;
             }
             uint8_t status = mark == 0xF8 ? 0x20 : 0;

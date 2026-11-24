@@ -101,7 +101,8 @@ noise when you choose to hear it)
 - **Floppies**: two drives, a **WD1793** with Disk BASIC's HALT and NMI
   timing, `.DSK` images (JVC: RS-DOS and OS-9 disks, 35 or 40 tracks, one or
   two sides, 80 tracks), formatting with DSKINI, writes back to the image;
-  `.DMK` images (double density) read only
+  DMK images (double density, read only, found by their header whatever
+  their extension: archives name protected originals `.dsk`)
 - **Hard disk**: an SD-card image on the **VHD interface** that NitrOS-9's
   emulator driver (EmuDsk) uses: OS-9 runs from it, and writes go back to it
 - **New blank media** from the setup screen or the web page: 156, 360 or
@@ -302,10 +303,12 @@ options and the lessons learned along the way.
   open. [Replay and MaTouch results](docs/software-replay-2026-11-24.md)
 - The cartridge slot holds a ROM cartridge or the disk controller, not
   both (there's no Multi-Pak).
-- Floppy images are JVC (`.DSK`, `.OS9`) or DMK (`.DMK`, read only,
+- Floppy images are JVC (`.DSK`, `.OS9`) or DMK (any extension, read only,
   double density); no `.VDK`. A JVC track read whole gives its sectors'
-  data without gaps; a DMK track gives its raw bytes. Protected DMK
-  images haven't been tried yet. [DMK reads](docs/dmk-reads-2026-11-24.md)
+  data without gaps; a DMK track gives its raw bytes. The 21 protected
+  boot disks at the Color Computer Archive reach their title or first
+  prompt. [DMK reads](docs/dmk-reads-2026-11-24.md) ·
+  [Protected DMKs](docs/dmk-protected-2026-11-24.md)
 - The floppy drive is faster than a real one (2 ms a track, no turning to
   the sector).
 - On the CoCo 3, a palette write shows from the pixel the beam was at,

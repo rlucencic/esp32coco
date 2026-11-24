@@ -45,11 +45,18 @@ def make_dmk():
         data_record = bytearray(record(bytes([mark]) + bytes([fill]) * (128 << (size_code & 3))))
         if sector == 2:
             data_record[-1] ^= 1
+        if sector == 8:
+            data_record[0] = 0x14       # the first A1 as Read Track gives it (CRC over three)
         start = offset + distance
         track[start:start + len(data_record)] = data_record
     # Sector 4's data now holds sector 5's ID: its CRC over what is there
     mark = 1200 + 23
     track[mark + 129:mark + 131] = crc(bytes(track[mark:mark + 129]))
+    # The rest of the table as tools leave it: Diecom's $0080 filler, a
+    # pointer that misses its FE, one past the track (all to be ignored)
+    struct.pack_into('<HHH', track, 2 * len(sectors), 0x0080, 0x8000 | 1199, 0x8000 | 0x3FFF)
+    for i in range(2 * len(sectors) + 6, 128, 2):
+        struct.pack_into('<H', track, i, 0x0080)
     return header + track
 
 
@@ -60,5 +67,4 @@ if __name__ == '__main__':
     output = parser.parse_args()
     image = make_dmk()
     output.valid.write_bytes(image)
-    struct.pack_into('<H', image, 16, 0xffff)
-    output.invalid.write_bytes(image)
+    output.invalid.write_bytes(image[:-1])          # its size and header disagree

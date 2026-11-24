@@ -26,6 +26,9 @@
  *   COCO_WAV=<file>          write the sound
  *   COCO_TRACE=<hex pc>:<n>  print n instructions from when pc is reached
  *   COCO_PCLOG=<hex pc>:<n>  the registers the first n times pc runs
+ *   COCO_WATCH=<hex addr>    each change of the byte there (as the CPU sees
+ *                            it), with the 24 steps (instructions or
+ *                            interrupts) before it
  *   COCO_STATUS=<n>          machine state every n frames
  *   COCO_DEBUG=<port>        serve the debugger (esp32emu's docs/debugger.md) on
  *                            127.0.0.1:<port> and run in real time until killed
@@ -296,8 +299,43 @@ static int s_trace_pc = -1, s_trace_n;
 static bool s_tracing;
 static int s_pclog_pc = -1, s_pclog_n;
 
+#define WATCH_STEPS 24
+static int s_watch = -1, s_watch_value = -1;
+static struct {
+    unsigned frame;
+    int line;
+    uint16_t pc, x, u, s;
+    uint8_t a, b, cc;
+} s_steps[WATCH_STEPS];
+static unsigned s_step;
+
 void m6809_host_hook(m6809_t *c)
 {
+    if (s_watch >= 0) {
+        int v = coco_peek((uint16_t)s_watch);
+        if (v != s_watch_value && s_watch_value >= 0) {
+            printf("host: frame %u line %d $%04X %02X -> %02X; the steps before:\n", (unsigned)coco.frames,
+                   coco.line, s_watch, s_watch_value, v);
+            for (unsigned i = s_step; i < s_step + WATCH_STEPS; i++) {
+                const typeof(s_steps[0]) *t = &s_steps[i % WATCH_STEPS];
+                char dis[40];
+                m6809_disassemble(c, t->pc, dis, sizeof(dis));
+                printf("host:   %6u/%3d %04X  %-20s A=%02X B=%02X X=%04X U=%04X S=%04X CC=%02X\n", t->frame, t->line,
+                       t->pc, dis, t->a, t->b, t->x, t->u, t->s, t->cc);
+            }
+        }
+        s_watch_value = v;
+        typeof(s_steps[0]) *t = &s_steps[s_step++ % WATCH_STEPS];
+        t->frame = (unsigned)coco.frames;
+        t->line = coco.line;
+        t->pc = c->pc;
+        t->a = c->a;
+        t->b = c->b;
+        t->x = c->x;
+        t->u = c->u;
+        t->s = c->s;
+        t->cc = c->cc;
+    }
     if (c->halt || c->wait) {
         return;
     }
@@ -375,6 +413,9 @@ int main(int argc, char **argv)
     if (getenv("COCO_FDCLOG")) {
         extern bool coco_fdc_log;
         coco_fdc_log = true;
+    }
+    if (getenv("COCO_WATCH")) {
+        s_watch = (int)(strtoul(getenv("COCO_WATCH"), NULL, 16) & 0xFFFF);
     }
     if (getenv("COCO_PCLOG")) {
         unsigned pc = 0;

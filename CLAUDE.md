@@ -120,9 +120,12 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
 - `pia/pia.c`, `keyboard/keyboard.c` (matrix, typing queue), `joystick/`,
   `sound/sound.c` (DAC + single bit through the mux, averaged per half line,
   DC blocker, ring in PSRAM), `cartridge/`, `cassette/`, `fdc/` (WD1793 +
-  DSKREG, JVC images; DMK read only: IDs from the track's pointer table, the
-  data mark within 43 bytes of the ID, CRCs and deleted data as stored, no
-  rotation), `harddisk/vhd.c` (VHD at $FF80).
+  DSKREG, JVC images; DMK read only, found by its header and size whatever
+  the extension (archives call them .dsk): IDs from the track's pointer
+  table, cut down at insert to double-density ones that point at an FE
+  (tools pad it), the data mark within 43 bytes of the ID after two A1s
+  (Read Track-made kits mangle the first), CRCs and deleted data as
+  stored, tracks up to 0x2940, no rotation), `harddisk/vhd.c` (VHD at $FF80).
 - The frame is 640x240 colour numbers (0-63 CoCo 3, 64-79 VDG, 80-83
   artifact) in PSRAM; `coco_render_line_rgb565()` for the presenter.
 
@@ -162,6 +165,17 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   10 fps** (51 fps, core 1 100%, `draw` 51% with a write every other
   line): the line's palette entries are drawn once and looked up per
   stretch, and two-colour bytes expand 4 pixels a word (60 fps, 81%).
+- **A LOADM file that starts itself mustn't be EXECed**: Diecom's loaders
+  (Gates of Delirium, Iron Forest, Medieval Madness) have the entry
+  address $0000 and start through BASIC's output hook at $0167 as LOADM
+  ends. `LOADM"GATES":EXEC` ran BASIC's variables as code, which here hit
+  a `STU $1010` and cleared two bytes of the loader: the protected sector
+  read fine, then the game reset to BASIC. `COCO_WATCH=1010` found it.
+- **Typed text after which a program takes over is never finished**: the
+  host holds a typed ENTER until BASIC has scanned the keyboard, so a
+  script's later lines (shots too) wait forever and the program sees a key
+  held. Type without `\n` and press ENTER with `key 48 1` / `key 48 0`;
+  for pictures, end separate runs at their frame.
 
 ## Testing
 
@@ -172,6 +186,7 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   (`<frame> type|key|joy|shot|text|insert|eject|rewind|reset|warm|peek|dump|dis|status`;
   a line waits for the text typed before it), `COCO_TEXT`, `COCO_WAV`,
   `COCO_TRACE=<pc>:<n>`, `COCO_PCLOG=<pc>:<n>`, `COCO_STATUS=<n>`,
+  `COCO_WATCH=<addr>` (each change of a byte, with the 24 steps before it),
   `COCO_FDCLOG`, `COCO_DEBUG=<port>`. Runs ~5000 frames a second.
 - The 6809/6309 core: `make -C ../esp32emu/components/m6809/test test`
   (151 cases, 1302 opcode checks).
@@ -205,6 +220,13 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   replays above give identical captures and PCM from either. Checked on
   the MaTouch through the debugger and Disk BASIC.
   [DMK reads](docs/dmk-reads-2026-11-24.md)
+- **Protected DMKs (2026-11-24).** The Color Computer Archive's protected
+  originals (29 DMKs in 23 title zips, `Copy protected DMK version/`, most
+  named .dsk): all 21 boot disks reach their title or first prompt on the
+  host, compared with XRoar (give it a .dmk copy: it goes by the
+  extension), four on the MaTouch. `components/coco/host/dmkinfo.py`
+  lists a DMK's tracks as fdc.c reads them. Commands per title:
+  [Protected DMKs](docs/dmk-protected-2026-11-24.md)
 - **Palette writes inside a line (2026-11-24).** `make -C
   components/coco/host check-raster` (needs the ROMs): `rastercart.py`'s
   cartridges write palette 0 one cycle later each two-line block (and

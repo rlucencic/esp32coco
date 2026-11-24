@@ -26,7 +26,8 @@ $(BUILD)/dmk_test: dmk_test.c $(COCO_OBJS)
 
 check-dmk: $(BUILD)/dmk_test
 	python3 dmk_fixture.py $(BUILD)/fixture.dmk $(BUILD)/invalid.dmk
-	./$(BUILD)/dmk_test $(BUILD)/fixture.dmk $(BUILD)/invalid.dmk
+	cp $(BUILD)/fixture.dmk $(BUILD)/fixture-dmk.dsk
+	./$(BUILD)/dmk_test $(BUILD)/fixture.dmk $(BUILD)/invalid.dmk $(BUILD)/fixture-dmk.dsk
 
 # Mid-line palette writes (needs the ROMs: COCO_ROMS, default ../../../roms)
 check-raster: $(BUILD)/coco_host

@@ -49,10 +49,15 @@ static void check_sector(uint8_t sector, unsigned length, uint8_t value, uint8_t
 
 int main(int argc, char **argv)
 {
-    assert(argc == 3);
+    assert(argc == 4);
     fdc_reset();
     assert(!coco_disk_insert(0, argv[2]));
     assert(coco_disk_path(0) == NULL);
+    /* the same DMK named .dsk: found by its header, read only */
+    assert(coco_disk_insert(0, argv[3]));
+    assert(coco_disk_write_protected(0));
+    assert(fdc_disk_bytes(0, false) == 0);
+    coco_disk_eject(0);
     assert(coco_disk_insert(0, argv[1]));
     assert(coco_disk_write_protected(0));
     fdc_write(SELECT, 0x29);  /* Drive 0, motor, double density. */
