@@ -1,0 +1,14 @@
+150 type LOADM "BREAKIN1":EXEC\n
+1100 shot break-in-title.ppm
+1200 joy 0 32 32 1
+1260 joy 0 32 32 0
+1280 joy 1 32 32 1
+1340 joy 1 32 32 0
+1400 type 1
+1530 joy 0 55 32 1
+1640 shot break-in-play.ppm
+1650 joy 0 55 32 0
+1660 joy 1 55 32 1
+1770 shot break-in-right.ppm
+1780 joy 1 55 32 0
+1850 status

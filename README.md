@@ -295,10 +295,10 @@ options and the lessons learned along the way.
 
 - New. Checked on both boards: Color BASIC and Disk BASIC, the graphics
   modes, saving and loading on floppies and tapes, NitrOS-9 (6809 and 6309)
-  from the hard disk, the setup screen and the drives page. Not tried by
-  hand yet: the sound by ear, Bluetooth and USB keyboards, the mouse and
-  the touchpad as the joystick, the Tab5 Keyboard. **Games and other software
-  haven't been tried yet**; no commercial cartridges (only a test one).
+  from the hard disk, the setup screen and the drives page. Tiler Tex
+  and B.E. Break-In reach gameplay on the host and MaTouch. Speaker
+  listening, hands-on input, and commercial cartridge checks remain
+  open. [Replay and MaTouch results](docs/software-replay-2026-11-24.md)
 - The cartridge slot holds a ROM cartridge or the disk controller, not
   both (there's no Multi-Pak).
 - Floppy images are JVC (`.DSK`, `.OS9`): no `.DMK` or `.VDK`, no copy

@@ -1,0 +1,13 @@
+150 type RUN "TILERTEX"\n
+600 shot tiler-splash.ppm
+1200 type N
+1700 key 48 1
+1730 key 48 0
+3600 shot tiler-level-loading.ppm
+3650 joy 0 63 32 0
+3650 joy 1 63 32 0
+3950 shot tiler-right.ppm
+4020 joy 0 32 63 0
+4020 joy 1 32 63 0
+4280 shot tiler-down.ppm
+4300 status

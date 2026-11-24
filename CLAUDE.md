@@ -176,6 +176,11 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   mouse/touch as the joystick, the Tab5 Keyboard.
 - Test media live in the scratchpad (NitrOS-9 EOU from lcurtisboyle.com);
   never in the repository.
+- **Original software replays (2026-11-24).** Tiler Tex and B.E.
+  Break-In reach gameplay on the host and MaTouch. The host records PCM
+  for both. The MaTouch exercises the touchpad-to-joystick path with
+  console-injected touches and reports the DAC output for a BASIC tone.
+  [Replays and checkpoints](docs/software-replay-2026-11-24.md)
 - **Free disk space** (web page, `space/space.c`): floppies OS-9, then
   RS-DOS; the VHD OS-9; counted at insert, eject and after a flush. Host:
   FREE(0)/FREE(1) and NitrOS-9's `free`; Tab5 (2026-10-21): an OS-9
@@ -184,7 +189,7 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
 
 ## Open items
 
-- Games, commercial cartridges (bank-switched ones over 32 KB), Multi-Pak
+- Broader game coverage, commercial cartridges (bank-switched ones over 32 KB), Multi-Pak
   (cartridge and disk controller together), DriveWire, RS-232.
 - Floppy formats other than JVC (DMK, VDK); mid-line video changes.
 - A web page screenshot for the README (served from a local mock, as the
