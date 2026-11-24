@@ -9,7 +9,8 @@
  * Each scan line: the line's syncs and interrupts at its start, the CPU up
  * to its end (stopping early for timed events: the disk controller, the
  * GIME's timer), then the VDG or GIME draws it with the registers as they
- * are at its end, and the sound gets its two samples.
+ * are at its end (but the GIME's palette writes from the pixel the beam
+ * was at: gime_video.c), and the sound gets its two samples.
  */
 #pragma once
 
@@ -214,6 +215,8 @@ enum {
     GIME_EI2 = 0x04, GIME_EI1 = 0x02, GIME_EI0 = 0x01,
 };
 
+#define GIME_LINE_CHANGES   64          /* colour writes inside a line's picture */
+
 typedef struct {
     uint8_t reg[16];                    /* $FF90-$FF9F */
     uint8_t mmu[16];                    /* $FFA0-$FFAF, 6 bits */
@@ -228,6 +231,15 @@ typedef struct {
     int line_in_row;
     int top_border, body;               /* lines */
     uint8_t ff22;                       /* the VDG mode lines as PIA1 PB had them */
+    /* The palette and the border (entry 16) where this line's picture
+     * starts, and the writes that land inside it (gime_video.c)
+     */
+    uint8_t line_colours[17];
+    int changes;
+    struct {
+        uint16_t x;                     /* the frame pixel it shows from */
+        uint8_t index, value;
+    } change[GIME_LINE_CHANGES];
 } gime_t;
 
 extern gime_t gime;
@@ -239,6 +251,7 @@ void gime_set_line(uint8_t interrupt, bool level);  /* EI0-EI2, HBORD, VBORD */
 void gime_timer_event(void);
 void gime_frame_start(void);
 void gime_render_line(int line);
+void gime_colour_written(int index, uint8_t value);  /* palette 0-15, border 16 */
 bool gime_video_body(int line);         /* the line is in the picture's body */
 extern const uint8_t gime_font[128][8]; /* 8 x 8, bit 0 the left pixel */
 

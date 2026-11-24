@@ -44,6 +44,8 @@ void gime_reset(void)
         gime.mmu[i] = gime.mmu[i + 8] = (uint8_t)(0x38 + i);
     }
     memset(gime.palette, 0, sizeof(gime.palette));
+    memset(gime.line_colours, 0, sizeof(gime.line_colours));
+    gime.changes = 0;
     gime.irq = gime.firq = 0;
     gime.lines = 0;
     gime.timer_at = NEVER;
@@ -152,6 +154,9 @@ static void write_register(int r, uint8_t v)
     case 4:
         restart_timer(coco_now());
         break;
+    case 0xA:
+        gime_colour_written(16, v & 0x3F);
+        break;
     default:
         break;
     }
@@ -169,6 +174,7 @@ void gime_write(uint16_t a, uint8_t v)
         }
     } else if (a < 0xFFC0) {
         gime.palette[a & 15] = v & 0x3F;
+        gime_colour_written(a & 15, v & 0x3F);
     } else if (a < 0xFFE0) {
         sam_write(a - 0xFFC0);
     }

@@ -109,7 +109,14 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   `$FF92/93`, reading them acknowledges). `gime/gime_video.c`: the frame's
   latches (address, scroll, geometry 192/200/225), text (font8x8, public
   domain, `gime/font8x8.c`) and graphics, wide (640) or 512 with borders;
-  each line expanded to a pixel a byte and widened with word stores.
+  each line expanded to a pixel a byte and widened with word stores (two
+  colours: 4 pixels a word from a nibble table). Palette writes show from
+  the beam's pixel (XRoar's scope-measured timing: HBORD where the picture
+  ends, 912 pixels a line, so a 640-pixel picture starts 272 after it, a
+  512 one 400; the write in STA extended's cycle 4): before the picture
+  the whole line, after it the next; a line with writes draws its palette
+  entries once and maps each stretch. The border is latched once a line,
+  22 pixels before the picture (XRoar's '86, unverified there).
 - `pia/pia.c`, `keyboard/keyboard.c` (matrix, typing queue), `joystick/`,
   `sound/sound.c` (DAC + single bit through the mux, averaged per half line,
   DC blocker, ring in PSRAM), `cartridge/`, `cassette/`, `fdc/` (WD1793 +
@@ -147,6 +154,14 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
 - **memcmp/memset on the PSRAM frame cost half the core** on the MaTouch
   (40 fps in HSCREEN 2): lines are hashed, fills are word stores, and
   `address % ram_size` (a division per byte) became a mask.
+- **SYNC ends on any interrupt line, masked ones too**: a timing program
+  started from BASIC SYNCed on HBORD and still ran free in XRoar (scattered
+  edges), because BASIC's 60 Hz PIA interrupt stayed flagged. Turn the
+  PIAs' interrupts off and read their flags away first.
+- **Drawing a line again for each mid-line palette write cost the MaTouch
+  10 fps** (51 fps, core 1 100%, `draw` 51% with a write every other
+  line): the line's palette entries are drawn once and looked up per
+  stretch, and two-colour bytes expand 4 pixels a word (60 fps, 81%).
 
 ## Testing
 
@@ -190,6 +205,14 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
   replays above give identical captures and PCM from either. Checked on
   the MaTouch through the debugger and Disk BASIC.
   [DMK reads](docs/dmk-reads-2026-11-24.md)
+- **Palette writes inside a line (2026-11-24).** `make -C
+  components/coco/host check-raster` (needs the ROMs): `rastercart.py`'s
+  cartridges write palette 0 one cycle later each two-line block (and
+  eight colours a line with `--stripes`), checked against the formula
+  pixel for pixel. Compared with a locally patched XRoar (`--bin`, its null
+  UI writing a PNG; not in the repo): the same within ~1 cycle once our
+  6809 leaves SYNC 3 cycles later as XRoar's does. MaTouch at 60 fps, its
+  pictures identical to the host's. [The measurement](docs/gime-raster-2026-11-24.md)
 - **Free disk space** (web page, `space/space.c`): floppies OS-9, then
   RS-DOS; the VHD OS-9; counted at insert, eject and after a flush. Host:
   FREE(0)/FREE(1) and NitrOS-9's `free`; Tab5 (2026-10-21): an OS-9
@@ -201,7 +224,8 @@ key (row * 8 + column: 1 A, 48 ENTER, 35 SPACE, 55 SHIFT), `K <n> 0|1`,
 - Broader game coverage, commercial cartridges (bank-switched ones over 32 KB), Multi-Pak
   (cartridge and disk controller together), DriveWire, RS-232.
 - VDK floppies; DMK writes, single density and rotation timing (TODO.md);
-  mid-line video changes.
+  mid-line changes other than the GIME's palette; the 6809's interrupt and
+  SYNC latency (TODO.md).
 - A web page screenshot for the README (served from a local mock, as the
   other projects did: never the live board's page).
 

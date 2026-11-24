@@ -308,8 +308,12 @@ options and the lessons learned along the way.
   images haven't been tried yet. [DMK reads](docs/dmk-reads-2026-11-24.md)
 - The floppy drive is faster than a real one (2 ms a track, no turning to
   the sector).
-- Each line is drawn with the video registers as they are at its end: a
-  change in the middle of a line (palette, mode) shows on the whole line.
+- On the CoCo 3, a palette write shows from the pixel the beam was at,
+  after XRoar's measured GIME timing. The 6809 starts its next instruction
+  about three cycles sooner after an interrupt than XRoar's does, so raster
+  effects land a little early. Other video registers still apply to the
+  whole line, and so does every VDG (CoCo 2) change.
+  [Palette writes inside a line](docs/gime-raster-2026-11-24.md)
   The CoCo 3's composite colours and the artifact colours are
   approximations; the 6847's "stripes" mode is as MAME has it.
 - No RS-232, printer, DriveWire, Orchestra-90 or the 2 MB and 8 MB memory

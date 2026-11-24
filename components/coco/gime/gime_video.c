@@ -65,10 +65,10 @@ static int lines_per_row(void)
     return lpr[gime.reg[8] & 7];
 }
 
-static uint8_t border_colour(void)
+static uint8_t border_colour(const uint8_t *colours)
 {
     if (!gime.legacy) {
-        return gime.reg[0xA] & 0x3F;
+        return colours[16];
     }
     uint8_t pb = pia_output(1, 1);
     if (pb & 0x80) {
@@ -123,10 +123,16 @@ static void COCO_HOT widen(uint8_t *out, const uint8_t *pix, int n, int px)
 /* Graphics: bytes a row, bits a pixel, by $FF99 bits 4-0 (as MAME has
  * them; the 128 and 160 byte rows have no 2-colour mode)
  */
-static void COCO_HOT graphics_line(uint8_t *out, int width)
+/* A nibble's 4 pixels as bytes 0/1, the left one first (lowest address) */
+static const uint32_t nibble_bits[16] = {
+    0x00000000, 0x01000000, 0x00010000, 0x01010000, 0x00000100, 0x01000100, 0x00010100, 0x01010100,
+    0x00000001, 0x01000001, 0x00010001, 0x01010001, 0x00000101, 0x01000101, 0x00010101, 0x01010101,
+};
+
+static void COCO_HOT graphics_line(uint8_t *out, int width, const uint8_t *pal)
 {
     static const uint8_t bytes_for[8] = { 16, 20, 32, 40, 64, 80, 128, 160 };
-    static uint8_t pix[COCO_SCREEN_WIDTH];
+    static uint8_t pix[COCO_SCREEN_WIDTH] __attribute__((aligned(4)));
     uint8_t vres = gime.reg[9];
     int bytes = bytes_for[(vres >> 2) & 7];
     int cres = vres & 3;
@@ -136,7 +142,6 @@ static void COCO_HOT graphics_line(uint8_t *out, int width)
     }
     uint32_t start = (gime.reg[0xF] & 0x7F) * 2u;
     uint32_t base = gime.video_address;
-    const uint8_t *pal = gime.palette;
     uint8_t *p = pix;
     for (int i = 0; i < bytes; i++) {
         uint8_t d = ram_at(base + ((start + (uint32_t)i) & 0xFF));
@@ -153,11 +158,17 @@ static void COCO_HOT graphics_line(uint8_t *out, int width)
             p[3] = pal[d & 3];
             p += 4;
             break;
-        default:
-            for (int j = 7; j >= 0; j--) {
-                *p++ = pal[(d >> j) & 1];
-            }
+        default: {
+            /* 4 pixels a word: each 0/1 byte times (colour 0 ^ colour 1),
+             * then ^ colour 0 (colours below 64: no carries)
+             */
+            uint32_t c0 = pal[0] * 0x01010101u, flip = (uint32_t)(pal[0] ^ pal[1]);
+            uint32_t *w = (uint32_t *)p;
+            w[0] = (nibble_bits[d >> 4] * flip) ^ c0;
+            w[1] = (nibble_bits[d & 15] * flip) ^ c0;
+            p += 8;
             break;
+        }
         }
     }
     int n = (int)(p - pix);
@@ -170,7 +181,7 @@ static int graphics_pitch(void)
     return bytes_for[(gime.reg[9] >> 2) & 7];
 }
 
-static void COCO_HOT text_line(uint8_t *out, int width)
+static void COCO_HOT text_line(uint8_t *out, int width, const uint8_t *pal)
 {
     static uint8_t pix[COCO_SCREEN_WIDTH];
     uint8_t vres = gime.reg[9];
@@ -187,7 +198,6 @@ static void COCO_HOT text_line(uint8_t *out, int width)
     }
     uint32_t start = (gime.reg[0xF] & 0x7F) * 2u;
     uint32_t base = gime.video_address;
-    const uint8_t *pal = gime.palette;
     uint8_t *p = pix;
     for (int i = 0; i < cols; i++) {
         uint32_t off = attributes ? (uint32_t)i * 2 : (uint32_t)i;
@@ -216,21 +226,59 @@ static void COCO_HOT text_line(uint8_t *out, int width)
     widen(out, pix, cols * 8, width / (cols * 8));
 }
 
-void COCO_HOT gime_render_line(int line)
+/* ---- Colour writes inside a line ----
+ *
+ * A line (a run of the CPU) starts at HBORD, which comes where the
+ * picture ends (XRoar's scope measurements of '86 and '87 GIMEs): a line
+ * is 912 pixels (228 ticks), so the next 640-pixel picture starts 272
+ * pixels after HBORD, a 512-pixel one 400 (shown from frame pixel 64).
+ *
+ * A palette write shows from the pixel the beam is at: the line is drawn
+ * with the colours where its picture starts, then again from each write's
+ * pixel with the colours after it. A write before the picture's first
+ * pixel counts for the whole line; one after its last, for the next. The
+ * write's time: its instruction's start plus WRITE_CYCLE (STA and STB
+ * extended write in their fifth cycle; other stores within a cycle or two
+ * of that). The border colour is taken once a line, 22 pixels before the
+ * picture (XRoar's '86 GIME): later writes count from the next line.
+ */
+#define WRITE_CYCLE         4           /* STA/STB extended: the write in cycle 4 of 0-4 */
+#define BORDER_LATCH        22          /* pixels before the picture */
+
+void gime_colour_written(int index, uint8_t value)
 {
-    static uint8_t buf[COCO_SCREEN_WIDTH] __attribute__((aligned(4)));
-    int row = line - FIRST_SHOWN_LINE;
-    bool shown = row >= 0 && row < COCO_SCREEN_HEIGHT;
-    uint8_t edge = border_colour();
-    if (!gime_video_body(line)) {
-        if (shown) {
-            memset(buf, edge, sizeof(buf));
-            vdg_commit(row, buf);
+    bool wide = !gime.legacy && (gime.reg[9] & 0x04);
+    int width = wide ? 640 : 512;
+    int tick = (int)(coco_now() - coco.line_tick) + (WRITE_CYCLE << coco.tick_shift);
+    int x = tick * 4 - (912 - width);   /* pixels into the picture */
+    if (index == 16) {
+        if (x <= -BORDER_LATCH) {
+            gime.line_colours[16] = value;
         }
         return;
     }
+    if (x <= 0) {
+        gime.line_colours[index] = value;
+    } else if (x < width) {
+        if (gime.changes < GIME_LINE_CHANGES) {
+            gime.change[gime.changes].x = (uint16_t)(x + (COCO_SCREEN_WIDTH - width) / 2);
+            gime.change[gime.changes].index = (uint8_t)index;
+            gime.change[gime.changes].value = value;
+            gime.changes++;
+        }
+    }
+}
 
-    int pitch;
+/* The line's 640 colour numbers with these colours (no state changes: a
+ * line may be drawn more than once)
+ */
+static void COCO_HOT draw(uint8_t *buf, const uint8_t *colours, bool body)
+{
+    uint8_t edge = border_colour(colours);
+    if (!body) {
+        memset(buf, edge, COCO_SCREEN_WIDTH);
+        return;
+    }
     if (gime.legacy) {
         uint8_t pb = pia_output(1, 1);
         int n = vdg_bytes(pb);
@@ -241,43 +289,102 @@ void COCO_HOT gime_render_line(int line)
         for (int k = 0; k < n; k++) {
             data[k] = ram_at(gime.video_address + (uint32_t)k);
         }
-        if (shown) {
-            memset(buf, edge, 64);
-            memset(buf + 576, edge, 64);
-            vdg_emit(pb, data, n, gime.line_in_row, gime.palette, true, COCO_ARTIFACT_OFF, buf + 64);
-        }
-        pitch = n;
+        memset(buf, edge, 64);
+        memset(buf + 576, edge, 64);
+        vdg_emit(pb, data, n, gime.line_in_row, colours, true, COCO_ARTIFACT_OFF, buf + 64);
+        return;
+    }
+    bool wide = (gime.reg[9] & 0x04) != 0;
+    if (!wide) {
+        memset(buf, edge, 64);
+        memset(buf + 576, edge, 64);
+    }
+    uint8_t *out = wide ? buf : buf + 64;
+    int width = wide ? 640 : 512;
+    if (gime.reg[8] & 0x80) {
+        graphics_line(out, width, colours);
     } else {
-        bool wide = (gime.reg[9] & 0x04) != 0;
-        uint8_t *body = wide ? buf : buf + 64;
-        int width = wide ? 640 : 512;
-        if (shown) {
-            if (!wide) {
-                memset(buf, edge, 64);
-                memset(buf + 576, edge, 64);
-            }
-            if (gime.reg[8] & 0x80) {
-                graphics_line(body, width);
-            } else {
-                text_line(body, width);
-            }
+        text_line(out, width, colours);
+    }
+}
+
+static int pitch(void)
+{
+    if (gime.legacy) {
+        uint8_t pb = pia_output(1, 1);
+        int n = vdg_bytes(pb);
+        if ((pb & 0x80) && n == 16 && !(sam.state & SAM_V0)) {
+            n = 32;
         }
-        if (gime.reg[8] & 0x80) {
-            pitch = graphics_pitch();
-        } else {
-            static const uint8_t cols_for[4] = { 32, 40, 64, 80 };
-            uint8_t vres = gime.reg[9];
-            pitch = cols_for[((vres >> 2) & 1) | ((vres >> 3) & 2)] * ((vres & 1) ? 2 : 1);
-        }
-        if (gime.reg[0xF] & 0x80) {
-            pitch = 256;
+        return n;
+    }
+    if (gime.reg[0xF] & 0x80) {
+        return 256;
+    }
+    if (gime.reg[8] & 0x80) {
+        return graphics_pitch();
+    }
+    static const uint8_t cols_for[4] = { 32, 40, 64, 80 };
+    uint8_t vres = gime.reg[9];
+    return cols_for[((vres >> 2) & 1) | ((vres >> 3) & 2)] * ((vres & 1) ? 2 : 1);
+}
+
+/* A body line with palette writes inside it: from each one's pixel on, the
+ * colours after it. The GIME's modes draw the pixels' palette entries once
+ * (an identity palette; the border is entry 16) and look each stretch up
+ * in its colours; the CoCo 2 modes (whose border isn't a palette entry)
+ * draw the line again for each.
+ */
+static void COCO_HOT draw_with_changes(uint8_t *buf)
+{
+    static const uint8_t identity[17] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+    static uint8_t entries[COCO_SCREEN_WIDTH] __attribute__((aligned(4)));
+    uint8_t colours[17];
+    memcpy(colours, gime.line_colours, sizeof(colours));
+    if (gime.legacy) {
+        draw(buf, colours, true);
+    } else {
+        draw(entries, identity, true);
+        for (int x = 0; x < gime.change[0].x; x++) {
+            buf[x] = colours[entries[x]];
         }
     }
-    if (shown) {
+    for (int k = 0; k < gime.changes;) {
+        int at = gime.change[k].x;
+        for (; k < gime.changes && gime.change[k].x == at; k++) {
+            colours[gime.change[k].index] = gime.change[k].value;
+        }
+        if (gime.legacy) {
+            draw(entries, colours, true);
+            memcpy(buf + at, entries + at, (size_t)(COCO_SCREEN_WIDTH - at));
+            continue;
+        }
+        int end = k < gime.changes ? gime.change[k].x : COCO_SCREEN_WIDTH;
+        for (int x = at; x < end; x++) {
+            buf[x] = colours[entries[x]];
+        }
+    }
+}
+
+void COCO_HOT gime_render_line(int line)
+{
+    static uint8_t buf[COCO_SCREEN_WIDTH] __attribute__((aligned(4)));
+    int row = line - FIRST_SHOWN_LINE;
+    bool body = gime_video_body(line);
+    if (row >= 0 && row < COCO_SCREEN_HEIGHT) {
+        if (gime.changes && body) {
+            draw_with_changes(buf);
+        } else {
+            draw(buf, gime.line_colours, body);
+        }
         vdg_commit(row, buf);
     }
-    if (++gime.line_in_row >= lines_per_row()) {
+    /* The next line starts with the colours as they are now */
+    memcpy(gime.line_colours, gime.palette, 16);
+    gime.line_colours[16] = gime.reg[0xA] & 0x3F;
+    gime.changes = 0;
+    if (body && ++gime.line_in_row >= lines_per_row()) {
         gime.line_in_row = 0;
-        gime.video_address += (uint32_t)pitch;
+        gime.video_address += (uint32_t)pitch();
     }
 }

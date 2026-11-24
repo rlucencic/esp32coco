@@ -28,6 +28,20 @@ check-dmk: $(BUILD)/dmk_test
 	python3 dmk_fixture.py $(BUILD)/fixture.dmk $(BUILD)/invalid.dmk
 	./$(BUILD)/dmk_test $(BUILD)/fixture.dmk $(BUILD)/invalid.dmk
 
+# Mid-line palette writes (needs the ROMs: COCO_ROMS, default ../../../roms)
+check-raster: $(BUILD)/coco_host
+	@for mode in 640 512; do for first in 4 44; do \
+	    python3 rastercart.py $(BUILD)/raster-$$mode-$$first.ccc --first $$first --mode $$mode && \
+	    COCO_ROMS=$${COCO_ROMS:-../../../roms} COCO_CART=$(BUILD)/raster-$$mode-$$first.ccc \
+	        ./$(BUILD)/coco_host 3 400 $(BUILD)/raster-$$mode-$$first.ppm > /dev/null && \
+	    python3 rastercart.py expect $(BUILD)/raster-$$mode-$$first.ppm --first $$first --mode $$mode || exit 1; \
+	done; \
+	python3 rastercart.py $(BUILD)/stripes-$$mode.ccc --mode $$mode --stripes && \
+	COCO_ROMS=$${COCO_ROMS:-../../../roms} COCO_CART=$(BUILD)/stripes-$$mode.ccc \
+	    ./$(BUILD)/coco_host 3 400 $(BUILD)/stripes-$$mode.ppm > /dev/null && \
+	python3 rastercart.py expect $(BUILD)/stripes-$$mode.ppm --mode $$mode --stripes || exit 1; \
+	done
+
 $(BUILD)/coco/%.o: $(COCO)/%.c $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -48,4 +62,4 @@ $(BUILD)/diskspace_coco.o: $(DISKSPACE)/coco.c $(DISKSPACE)/include/diskspace.h
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all check-dmk clean
+.PHONY: all check-dmk check-raster clean

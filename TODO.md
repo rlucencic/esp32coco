@@ -2,11 +2,6 @@
 
 Proposed work in priority order. See [Development](README.md#development) for the current project.
 
-3. **Quantify CoCo 3 raster changes.** Generate a mid-scanline palette or mode
-   switch and capture its horizontal position against a reference. Use this to
-   bound a change to the GIME renderer, with unchanged WIDTH 80 and HSCREEN 2
-   output as controls.
-
 4. **Check game audio and input by hand.** Use the [Tiler Tex and B.E.
    Break-In replays](docs/software-replay-2026-11-24.md). On the MaTouch,
    listen to both titles on the speaker and verify movement and fire
@@ -19,3 +14,14 @@ Proposed work in priority order. See [Development](README.md#development) for th
    pass the head, the index pulse against the raw track) or single density
    only where a loader needs it. Keep both replays' DMK and JVC runs
    identical as controls.
+
+6. **Match the 6809's interrupt and SYNC timing.** The [palette
+   measurement](docs/gime-raster-2026-11-24.md) puts raster writes about
+   three cycles (24–34 pixels at 1.79 MHz) earlier than XRoar. XRoar's 6809
+   latches an interrupt line for a cycle and then spends two dead cycles
+   leaving SYNC; `../esp32emu/components/m6809` resumes at once. In a
+   scratch copy that adds the three cycles, XRoar and ours agree within
+   about a cycle. Check the interrupt entry against the 6809 data sheet and
+   XRoar, change the shared core, and build every project that uses it.
+   Keep `check-raster` (with its expected positions moved), the replays,
+   Disk BASIC's HALT/NMI byte loop and NitrOS-9 as controls.
