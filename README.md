@@ -314,6 +314,10 @@ options and the lessons learned along the way.
 - The GIME's text characters are the public domain font8x8, not the GIME's
   own; the VDG's are a 5×7 font drawn for this project in its style.
 
+## Roadmap
+
+See [TODO.md](TODO.md) for proposed work and how to verify it.
+
 ## Credits
 
 - [MAME](https://www.mamedev.org)'s CoCo drivers (Nathan Woods and others,
